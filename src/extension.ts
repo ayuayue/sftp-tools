@@ -1,25 +1,111 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { SftpServersProvider, SftpExplorerProvider } from './sftpViewProvider';
+import { SettingsEditorProvider } from './settingsEditor';
+import { ServerItem } from './sftpViewProvider';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	// 创建输出通道
+	const outputChannel = vscode.window.createOutputChannel('SFTP Tools');
+	const log = (message: string) => {
+		const timestamp = new Date().toLocaleTimeString();
+		outputChannel.appendLine(`[${timestamp}] [INFO] ${message}`);
+	};
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "sftp-tools" is now active!');
+	log('SFTP Tools extension is activating...');
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('sftp-tools.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from SFTP Tools!');
-	});
+	// 注册服务器视图
+	const sftpServersProvider = new SftpServersProvider();
+	const sftpExplorerProvider = new SftpExplorerProvider();
 
-	context.subscriptions.push(disposable);
+	// 注册视图
+	vscode.window.registerTreeDataProvider('sftp-tools-servers', sftpServersProvider);
+	vscode.window.registerTreeDataProvider('sftp-tools-explorer', sftpExplorerProvider);
+
+	// 创建设置编辑器提供程序
+	const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri);
+
+	// 移除 showMessage 函数和调用
+	log('SFTP Tools extension is ready!');
+	outputChannel.show(true);
+
+	// 注册命令
+	context.subscriptions.push(
+		vscode.commands.registerCommand('sftp-tools.showInfo', () => {
+			const config = vscode.workspace.getConfiguration('sftp-tools');
+			const servers = config.get('servers') || [];
+			console.log('SFTP Tools Status:');
+			console.log(`- Total servers configured: ${Object.keys(servers).length}`);
+			console.log('- Configured servers:');
+			Object.keys(servers).forEach((server: any) => {
+				console.log(`  * ${server.name} (${server.host}:${server.port})`);
+			});
+			log(`SFTP Tools Info: ${Object.keys(servers).length} servers configured. Check Output for details.`);
+		}),
+		vscode.commands.registerCommand('sftp-tools.addServer', () => {
+			sftpServersProvider.addServer();
+		}),
+		vscode.commands.registerCommand('sftp-tools.editServer', (item) => {
+			settingsEditorProvider.showSettingsEditor(item);
+		}),
+		vscode.commands.registerCommand('sftp-tools.deleteServer', (item) => {
+			sftpServersProvider.deleteServer(item);
+		}),
+		vscode.commands.registerCommand('sftp-tools.openSettings', () => {
+			vscode.commands.executeCommand('workbench.action.openSettings', 'sftp-tools');
+		}),
+		vscode.commands.registerCommand('sftp-tools.refreshServers', () => {
+			sftpServersProvider.refresh();
+		}),
+		vscode.commands.registerCommand('sftp-tools.refreshExplorer', () => {
+			sftpExplorerProvider.refresh();
+		}),
+		vscode.commands.registerCommand('sftp-tools.openFile', (item) => {
+			sftpExplorerProvider.openFile(item, false);
+		}),
+		vscode.commands.registerCommand('sftp-tools.uploadFile', () => {
+			const editor = vscode.window.activeTextEditor;
+			if (editor) {
+				sftpExplorerProvider.uploadFile(editor.document);
+			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.openFileNonPreview', (item) => {
+			sftpExplorerProvider.openFile(item, true);
+		}),
+		vscode.commands.registerCommand('sftp-tools.openSettingsEditor', () => {
+			settingsEditorProvider.showSettingsEditor();
+		}),
+		vscode.commands.registerCommand('sftp-tools.connectServer', (serverItem: ServerItem) => {
+			if (serverItem.serverConfig) {
+				sftpExplorerProvider.connectToServer(serverItem.serverConfig);
+			}
+		}),
+		vscode.commands.registerCommand('sftp-tools._updateUploadButton', () => {
+			const editor = vscode.window.activeTextEditor;
+			if (editor) {
+				const uri = editor.document.uri.toString();
+				const fileInfo = sftpExplorerProvider.getFileInfo(uri);
+				if (fileInfo) {
+					return `Upload to Server (${fileInfo.serverConfig.name})`;
+				}
+			}
+			return 'Upload to Server';
+		})
+	);
+
+	// 添加一个新的命令来检查文件是否是远程文件
+	context.subscriptions.push(
+		vscode.window.onDidChangeActiveTextEditor(editor => {
+			if (editor) {
+				const uri = editor.document.uri.toString();
+				const isRemoteFile = sftpExplorerProvider.isRemoteFile(uri);
+				vscode.commands.executeCommand('setContext', 'sftp-tools.isRemoteFile', isRemoteFile);
+			}
+		})
+	);
 }
 
 // This method is called when your extension is deactivated

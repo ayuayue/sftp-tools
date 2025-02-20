@@ -4,20 +4,178 @@
   "description": "a nice sftp tools for vscode",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.97.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+    
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "sftp-tools.helloWorld",
-        "title": "Hello World"
+        "command": "sftp-tools.showInfo",
+        "title": "SFTP Tools: Show Configuration Info",
+        "icon": "$(info)"
+      },
+      {
+        "command": "sftp-tools.addServer",
+        "title": "Add Server",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sftp-tools.editServer",
+        "title": "Edit Server",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "sftp-tools.deleteServer",
+        "title": "Delete Server",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sftp-tools.openSettings",
+        "title": "Open Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "sftp-tools.openSettingsEditor",
+        "title": "Open Settings Editor",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "sftp-tools.refreshServers",
+        "title": "Refresh Servers",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sftp-tools.refreshExplorer",
+        "title": "Refresh Explorer",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sftp-tools.uploadFile",
+        "title": "%uploadFileCommand%",
+        "icon": {
+            "light": "$(cloud-upload)",
+            "dark": "$(cloud-upload)"
+        }
+      },
+      {
+        "command": "sftp-tools.openFileNonPreview",
+        "title": "Open File (Non-Preview)"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "SFTP Tools",
+      "properties": {
+        "sftp-tools.servers": {
+          "type": "array",
+          "default": [],
+          "description": "SFTP server configurations",
+          "items": {
+            "type": "object",
+            "required": ["name", "host", "username", "remotePath"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Server name"
+              },
+              "host": {
+                "type": "string",
+                "description": "Server host"
+              },
+              "port": {
+                "type": "number",
+                "default": 22,
+                "description": "Server port"
+              },
+              "username": {
+                "type": "string",
+                "description": "Username"
+              },
+              "password": {
+                "type": "string",
+                "description": "Password"
+              },
+              "remotePath": {
+                "type": "string",
+                "description": "Remote path"
+              }
+            }
+          }
+        }
+      }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "sftp-tools.showInfo",
+          "when": "view == sftp-tools-servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sftp-tools.refreshServers",
+          "when": "view == sftp-tools-servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sftp-tools.refreshExplorer",
+          "when": "view == sftp-tools-explorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sftp-tools.editServer",
+          "when": "view == sftp-tools-servers",
+          "group": "inline"
+        },
+        {
+          "command": "sftp-tools.deleteServer",
+          "when": "view == sftp-tools-servers",
+          "group": "inline"
+        },
+        {
+          "command": "sftp-tools.openFileNonPreview",
+          "when": "view == sftp-tools-explorer && viewItem == file",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "sftp-tools.uploadFile",
+          "when": "sftp-tools.isRemoteFile",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sftp-tools",
+          "title": "SFTP Tools",
+          "icon": "media/sftp.svg"
+        }
+      ]
+    },
+    "views": {
+      "sftp-tools": [
+        {
+          "id": "sftp-tools-servers",
+          "name": "SFTP Servers",
+          "type": "tree"
+        },
+        {
+          "id": "sftp-tools-explorer",
+          "name": "Explorer",
+          "type": "tree"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -30,8 +188,11 @@
     "lint": "eslint src",
     "test": "vscode-test"
   },
+  "dependencies": {
+    "ssh2": "^1.15.0"
+  },
   "devDependencies": {
-    "@types/vscode": "^1.97.0",
+    "@types/vscode": "^1.93.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@typescript-eslint/eslint-plugin": "^8.22.0",
@@ -42,6 +203,7 @@
     "webpack": "^5.97.1",
     "webpack-cli": "^6.0.1",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1"
+    "@vscode/test-electron": "^2.4.1",
+    "@types/ssh2": "^1.11.19"
   }
 }
