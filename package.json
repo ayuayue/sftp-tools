@@ -126,6 +126,11 @@
           "command": "sftp-tools.refreshExplorer",
           "when": "view == sftp-tools-explorer",
           "group": "navigation"
+        },
+        {
+          "command": "sftp-tools.openSettingsEditor",
+          "when": "view == sftp-tools-servers",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -166,8 +171,9 @@
       "sftp-tools": [
         {
           "id": "sftp-tools-servers",
-          "name": "SFTP Servers",
-          "type": "tree"
+          "name": "SFTP 服务器",
+          "icon": "resources/server.svg",
+          "contextualTitle": "SFTP 服务器"
         },
         {
           "id": "sftp-tools-explorer",

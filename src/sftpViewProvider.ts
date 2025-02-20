@@ -139,17 +139,25 @@ export class ServerItem extends vscode.TreeItem {
     constructor(
         public readonly label: string,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly serverConfig?: ServerConfig
+        public readonly serverConfig?: ServerConfig,
+        public readonly isEmptyMessage: boolean = false  // 新增参数
     ) {
         super(label, collapsibleState);
-        this.tooltip = `${this.label} (${serverConfig?.host})`;
-        this.description = serverConfig?.host;
-        this.contextValue = 'server';
-        this.command = {
-            command: 'sftp-tools.connectServer',
-            title: 'Connect to Server',
-            arguments: [this]
-        };
+        
+        if (!isEmptyMessage) {
+            this.tooltip = `${this.label} (${serverConfig?.host})`;
+            this.description = serverConfig?.host;
+            this.contextValue = 'server';
+            this.command = {
+                command: 'sftp-tools.connectServer',
+                title: 'Connect to Server',
+                arguments: [this]
+            };
+        } else {
+            // 为空提示消息设置特殊样式
+            this.tooltip = '请添加新的服务器配置';
+            this.iconPath = new vscode.ThemeIcon('info');
+        }
     }
 }
 
@@ -271,12 +279,8 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             fs.writeFileSync(tempPath, await this.sftpManager.readFile(item.path));
             
             this.log(`Created temp file: ${tempPath}`, 'info');
-            
             // 确保在打开文件前设置语言
-            const doc = await vscode.workspace.openTextDocument({
-                uri: vscode.Uri.file(tempPath),
-                language: this.getLanguageId(item.label)
-            });
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(tempPath));
 
             // 存储文件信息
             this.remoteFiles.set(doc.uri.toString(), {

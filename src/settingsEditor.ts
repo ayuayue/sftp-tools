@@ -97,7 +97,12 @@ export class SettingsEditorProvider {
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
                 <title>SFTP Settings</title>
                 <style>
-                    body { padding: 20px; }
+                    body { 
+                        padding: 20px; 
+                        min-height: 100vh;
+                        margin: 0;
+                        box-sizing: border-box;
+                    }
                     .server-form { margin-bottom: 20px; }
                     input, button { margin: 5px 0; }
                     .server-list { margin-top: 20px; }
@@ -134,19 +139,56 @@ export class SettingsEditorProvider {
                         border-radius: 4px;
                         box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
                     }
-                    .deleteBtn {
-                        background: var(--vscode-errorForeground);
-                    }
                     .server-list {
-                        margin-bottom: 80px; /* 为固定按钮留出空间 */
+                        margin-bottom: 80px;
+                    }
+                    
+                    /* 空状态样式 */
+                    .empty-state {
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        text-align: center;
+                        width: 100%;
+                        max-width: 400px;
+                    }
+                    
+                    .empty-state-text {
+                        font-size: 14px;
+                        margin-bottom: 8px;
+                        color: var(--vscode-foreground);
+                    }
+                    
+                    .empty-state-tip {
+                        font-size: 13px;
+                        color: var(--vscode-descriptionForeground);
+                        opacity: 0.8;
+                        margin-bottom: 6px;
+                    }
+                    
+                    .highlight {
+                        color: var(--vscode-textLink-foreground);
+                        font-weight: 500;
                     }
                 </style>
             </head>
             <body>
-                <div class="server-list" id="serverList"></div>
-                <div class="global-actions">
-                    <button id="addServerBtn">Add Server</button>
-                    <button id="saveSettingsBtn">Save All</button>
+                <div id="content">
+                    <div id="serverList" class="server-list"></div>
+                    <div id="emptyState" class="empty-state">
+                        <div class="empty-state-text">还没有配置任何服务器</div>
+                        <div class="empty-state-tip">
+                            点击右下角 <span class="highlight">添加服务器</span> 按钮开始配置
+                        </div>
+                        <div class="empty-state-tip">
+                            配置完成后点击 <span class="highlight">保存全部</span> 按钮保存更改
+                        </div>
+                    </div>
+                </div>
+                <div class="global-actions" id="globalActions">
+                    <button id="addServerBtn">添加服务器</button>
+                    <button id="saveSettingsBtn">保存全部</button>
                 </div>
                 <script nonce="${nonce}">
                     const vscode = acquireVsCodeApi();
@@ -156,7 +198,6 @@ export class SettingsEditorProvider {
                     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
 
                     window.addEventListener('message', event => {
-                        console.log('Received message:', event.data);
                         const message = event.data;
                         switch (message.command) {
                             case 'loadSettings':
@@ -180,55 +221,65 @@ export class SettingsEditorProvider {
 
                     function renderServers() {
                         const serverList = document.getElementById('serverList');
-                        serverList.innerHTML = servers.map((server, index) => {
-                            const serverDiv = document.createElement('div');
-                            serverDiv.className = 'server-item';
-                            serverDiv.dataset.serverName = server.name;
-                            serverDiv.innerHTML = \`
-                                <div class="form-group">
-                                    <label>Name:</label>
-                                    <input type="text" value="\${server.name}" data-index="\${index}" data-field="name">
-                                </div>
-                                <div class="form-group">
-                                    <label>Host:</label>
-                                    <input type="text" value="\${server.host}" data-index="\${index}" data-field="host">
-                                </div>
-                                <div class="form-group">
-                                    <label>Port:</label>
-                                    <input type="number" value="\${server.port}" data-index="\${index}" data-field="port">
-                                </div>
-                                <div class="form-group">
-                                    <label>Username:</label>
-                                    <input type="text" value="\${server.username}" data-index="\${index}" data-field="username">
-                                </div>
-                                <div class="form-group">
-                                    <label>Password:</label>
-                                    <input type="password" value="\${server.password}" data-index="\${index}" data-field="password">
-                                </div>
-                                <div class="form-group">
-                                    <label>Remote Path:</label>
-                                    <input type="text" value="\${server.remotePath}" data-index="\${index}" data-field="remotePath">
-                                </div>
-                                <div class="actions">
-                                    <button class="deleteBtn" data-index="\${index}">Delete</button>
-                                </div>
-                            \`;
+                        const emptyState = document.getElementById('emptyState');
+                        
+                        if (servers.length === 0) {
+                            serverList.style.display = 'none';
+                            emptyState.style.display = 'block';
+                        } else {
+                            serverList.style.display = 'block';
+                            emptyState.style.display = 'none';
+                            
+                            serverList.innerHTML = servers.map((server, index) => {
+                                const serverDiv = document.createElement('div');
+                                serverDiv.className = 'server-item';
+                                serverDiv.dataset.serverName = server.name;
+                                serverDiv.innerHTML = \`
+                                    <div class="form-group">
+                                        <label>Name:</label>
+                                        <input type="text" value="\${server.name}" data-index="\${index}" data-field="name">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Host:</label>
+                                        <input type="text" value="\${server.host}" data-index="\${index}" data-field="host">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Port:</label>
+                                        <input type="number" value="\${server.port}" data-index="\${index}" data-field="port">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Username:</label>
+                                        <input type="text" value="\${server.username}" data-index="\${index}" data-field="username">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Password:</label>
+                                        <input type="password" value="\${server.password}" data-index="\${index}" data-field="password">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Remote Path:</label>
+                                        <input type="text" value="\${server.remotePath}" data-index="\${index}" data-field="remotePath">
+                                    </div>
+                                    <div class="actions">
+                                        <button class="deleteBtn" data-index="\${index}">Delete</button>
+                                    </div>
+                                \`;
 
-                            serverDiv.querySelectorAll('input').forEach(input => {
-                                input.addEventListener('change', (e) => {
-                                    const target = e.target;
-                                    const index = parseInt(target.dataset.index);
-                                    const field = target.dataset.field;
-                                    updateServer(index, field, target.value);
+                                serverDiv.querySelectorAll('input').forEach(input => {
+                                    input.addEventListener('change', (e) => {
+                                        const target = e.target;
+                                        const index = parseInt(target.dataset.index);
+                                        const field = target.dataset.field;
+                                        updateServer(index, field, target.value);
+                                    });
                                 });
-                            });
 
-                            serverDiv.querySelector('.deleteBtn').addEventListener('click', () => {
-                                deleteServer(index);
-                            });
+                                serverDiv.querySelector('.deleteBtn').addEventListener('click', () => {
+                                    deleteServer(index);
+                                });
 
-                            return serverDiv.outerHTML;
-                        }).join('');
+                                return serverDiv.outerHTML;
+                            }).join('');
+                        }
 
                         document.querySelectorAll('.server-item input').forEach(input => {
                             input.addEventListener('change', (e) => {
