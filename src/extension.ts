@@ -19,7 +19,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 注册服务器视图
 	const sftpServersProvider = new SftpServersProvider();
-	const sftpExplorerProvider = new SftpExplorerProvider();
+	const sftpExplorerProvider = new SftpExplorerProvider(sftpServersProvider);
 
 	// 注册视图
 	vscode.window.registerTreeDataProvider('sftp-tools-servers', sftpServersProvider);
@@ -93,6 +93,42 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 			}
 			return 'Upload to Server';
+		}),
+		vscode.commands.registerCommand('sftp-tools.uploadToServer', async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				return;
+			}
+
+			const servers = sftpExplorerProvider.getServers();
+			if (servers.length === 0) {
+				vscode.window.showInformationMessage('No servers configured');
+				return;
+			}
+
+			// 创建服务器选择列表
+			const items = servers.map(server => ({
+				label: server.name,
+				description: `${server.host}:${server.port}`,
+				server: server
+			}));
+
+			const selected = await vscode.window.showQuickPick(items, {
+				placeHolder: 'Select server to upload to'
+			});
+
+			if (selected) {
+				await sftpExplorerProvider.uploadToServer(editor.document, selected.server);
+			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.disconnectServer', (serverItem: ServerItem) => {
+			sftpExplorerProvider.disconnectServer();
+		}),
+		vscode.commands.registerCommand('sftp-tools.uploadToAllServers', () => {
+			const editor = vscode.window.activeTextEditor;
+			if (editor) {
+				sftpExplorerProvider.uploadToAllServers(editor.document);
+			}
 		})
 	);
 
@@ -103,6 +139,16 @@ export function activate(context: vscode.ExtensionContext) {
 				const uri = editor.document.uri.toString();
 				const isRemoteFile = sftpExplorerProvider.isRemoteFile(uri);
 				vscode.commands.executeCommand('setContext', 'sftp-tools.isRemoteFile', isRemoteFile);
+			}
+		})
+	);
+
+	// 动态更新上传菜单
+	context.subscriptions.push(
+		vscode.window.onDidChangeActiveTextEditor(editor => {
+			if (editor) {
+				const servers = sftpExplorerProvider.getServers();
+				vscode.commands.executeCommand('setContext', 'sftp-tools.hasServers', servers.length > 0);
 			}
 		})
 	);

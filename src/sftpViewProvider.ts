@@ -3,6 +3,7 @@ import { SftpManager } from './sftpManager';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { time } from 'console';
 
 interface ServerConfig {
     name: string;
@@ -16,6 +17,7 @@ interface ServerConfig {
 export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<ServerItem | undefined | null | void> = new vscode.EventEmitter<ServerItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<ServerItem | undefined | null | void> = this._onDidChangeTreeData.event;
+    private activeServer?: string;  // 添加激活服务器标记
 
     constructor() {
         // 监听配置变化
@@ -42,7 +44,9 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
                 servers.map(server => new ServerItem(
                     server.name,
                     vscode.TreeItemCollapsibleState.None,
-                    server
+                    server,
+                    false,
+                    this.activeServer === server.name  // 传递激活状态
                 ))
             );
         }
@@ -50,36 +54,50 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
     }
 
     async addServer() {
-        const name = await vscode.window.showInputBox({ prompt: 'Enter server name' });
+        const config = vscode.workspace.getConfiguration('sftp-tools');
+        const servers: ServerConfig[] = config.get('servers') || [];
+
+        // 验证服务器名称
+        const validateServerName = (name: string): string | undefined => {
+            if (!name) {
+                return '服务器名称不能为空';
+            }
+            if (servers.some(s => s.name === name)) {
+                return '服务器名称已存在';
+            }
+            return undefined;
+        };
+
+        const name = await vscode.window.showInputBox({
+            prompt: '输入服务器名称',
+            validateInput: validateServerName
+        });
         if (!name) { return; }
 
-        const host = await vscode.window.showInputBox({ prompt: 'Enter host' });
+        const host = await vscode.window.showInputBox({ prompt: '输入主机地址' });
         if (!host) { return; }
 
         const port = await vscode.window.showInputBox({ 
-            prompt: 'Enter port',
+            prompt: '输入端口',
             value: '22'
         });
         if (!port) { return; }
 
-        const username = await vscode.window.showInputBox({ prompt: 'Enter username' });
+        const username = await vscode.window.showInputBox({ prompt: '输入用户名' });
         if (!username) { return; }
 
         const password = await vscode.window.showInputBox({ 
-            prompt: 'Enter password',
+            prompt: '输入密码',
             password: true
         });
         if (!password) { return; }
 
         const remotePath = await vscode.window.showInputBox({ 
-            prompt: 'Enter remote path',
+            prompt: '输入远程路径',
             value: '/'
         });
         if (!remotePath) { return; }
 
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const servers: ServerConfig[] = config.get('servers') || [];
-        
         servers.push({
             name,
             host,
@@ -133,6 +151,12 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
         const newServers = servers.filter(s => s.name !== serverItem.label);
         await config.update('servers', newServers, vscode.ConfigurationTarget.Global);
     }
+
+    // 添加设置激活服务器的方法
+    setActiveServer(serverName: string) {
+        this.activeServer = serverName;
+        this.refresh();
+    }
 }
 
 export class ServerItem extends vscode.TreeItem {
@@ -140,21 +164,27 @@ export class ServerItem extends vscode.TreeItem {
         public readonly label: string,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
         public readonly serverConfig?: ServerConfig,
-        public readonly isEmptyMessage: boolean = false  // 新增参数
+        public readonly isEmptyMessage: boolean = false,
+        public readonly isActive: boolean = false  // 添加激活状态参数
     ) {
         super(label, collapsibleState);
         
         if (!isEmptyMessage) {
             this.tooltip = `${this.label} (${serverConfig?.host})`;
             this.description = serverConfig?.host;
-            this.contextValue = 'server';
+            this.contextValue = isActive ? 'activeServer' : 'server';
             this.command = {
                 command: 'sftp-tools.connectServer',
                 title: 'Connect to Server',
                 arguments: [this]
             };
+
+            // 设置激活状态的图标
+            if (isActive) {
+                this.iconPath = new vscode.ThemeIcon('check');
+                this.description = `${serverConfig?.host} (已连接)`;
+            }
         } else {
-            // 为空提示消息设置特殊样式
             this.tooltip = '请添加新的服务器配置';
             this.iconPath = new vscode.ThemeIcon('info');
         }
@@ -173,8 +203,10 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     }>();
     private outputChannel: vscode.OutputChannel;
     private statusBarItem: vscode.StatusBarItem;
+    private serversProvider: SftpServersProvider;  // 添加引用
 
-    constructor() {
+    constructor(serversProvider: SftpServersProvider) {  // 通过构造函数注入
+        this.serversProvider = serversProvider;
         this.outputChannel = vscode.window.createOutputChannel('SFTP Tools');
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
         // 监听配置变化
@@ -225,9 +257,20 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
         try {
             await this.sftpManager.connect(server);
             this.currentServer = server;
+            this.serversProvider.setActiveServer(server.name);
             this.refresh();
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to connect: ${error.message}`);
+        }
+    }
+
+    async disconnectServer() {
+        if (this.currentServer) {
+            this.sftpManager.disconnect();
+            this.currentServer = undefined;
+            this.serversProvider.setActiveServer('');
+            this.refresh();
+            this.log('Disconnected from server', 'info');
         }
     }
 
@@ -267,39 +310,51 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
 
     async openFile(item: ExplorerItem, isDoubleClick = false) {
         try {
-            this.log(`Opening file: ${item.path}`, 'info');
+            this.log(`[${this.currentServer?.name}] Opening file: ${item.path}`, 'info');
+            
+            if (!this.currentServer) {
+                throw new Error('No server connected');
+            }
             
             // 创建临时文件
             const tmpDir = path.join(os.tmpdir(), 'sftp-tools');
             if (!fs.existsSync(tmpDir)) {
                 fs.mkdirSync(tmpDir, { recursive: true });
             }
+            // 使用完整路径作为文件名以保持唯一性
+            const tempPath = path.join(tmpDir, `~${item.label.replace(/[\/\\]/g, '_')}`);
             
-            const tempPath = path.join(tmpDir, `${this.currentServer?.name}-${item.label}`);
-            fs.writeFileSync(tempPath, await this.sftpManager.readFile(item.path));
+            // 获取并写入文件内容
+            const content = await this.sftpManager.readFile(item.path);
+            fs.writeFileSync(tempPath, content);
             
-            this.log(`Created temp file: ${tempPath}`, 'info');
-            // 确保在打开文件前设置语言
-            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(tempPath));
-
-            // 存储文件信息
-            this.remoteFiles.set(doc.uri.toString(), {
-                remotePath: item.path,
-                serverConfig: this.currentServer!,
-                tempPath: tempPath
-            });
+            this.log(`[${this.currentServer.name}] Created temp file: ${tempPath}`, 'info');
 
             // 打开文件
+            const doc = await vscode.workspace.openTextDocument(tempPath);
+            
+            // 存储文件信息（在显示之前）
+            this.remoteFiles.set(doc.uri.toString(), {
+                remotePath: item.path,
+                serverConfig: this.currentServer,
+                tempPath: tempPath
+            });
+            
+            // 设置语言
+            await vscode.languages.setTextDocumentLanguage(doc, this.getLanguageId(item.label));
+            
+            // 显示文档
             await vscode.window.showTextDocument(doc, {
                 preview: !isDoubleClick,
                 preserveFocus: !isDoubleClick
             });
-
+            
             // 设置上下文
             await vscode.commands.executeCommand('setContext', 'sftp-tools.isRemoteFile', true);
             
         } catch (error: any) {
-            this.log(`Failed to open file: ${error.message}`, 'error');
+            this.log(`[${this.currentServer?.name}] Failed to open file: ${error.message}`, 'error');
+            vscode.window.showErrorMessage(`Failed to open file: ${error.message}`);
         }
     }
 
@@ -318,36 +373,41 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
         return langMap[ext || ''] || 'plaintext';
     }
 
-    // 修改上传方法
+    private getServerDisplayName(server: ServerConfig): string {
+        return `${server.name} (${server.host}:${server.port})`;
+    }
+
     async uploadFile(document: vscode.TextDocument) {
         const uri = document.uri.toString();
         const fileInfo = this.remoteFiles.get(uri);
         
         if (!fileInfo) {
-            this.log(`No remote file information found for: ${uri}`, 'error');
+            this.log(`[${this.currentServer?.name}] No remote file information found for: ${uri}`, 'error');
             return;
         }
 
+        const serverDisplay = this.getServerDisplayName(fileInfo.serverConfig);
+
         try {
             // 显示状态栏消息
-            this.statusBarItem.text = `$(cloud-upload) Uploading to ${fileInfo.serverConfig.name}...`;
+            this.statusBarItem.text = `$(cloud-upload) Uploading to [${this.currentServer?.name}]`;
             this.statusBarItem.show();
 
-            this.log(`Uploading file: ${fileInfo.remotePath}`, 'info');
+            this.log(`[${this.currentServer?.name}] Uploading:
+ Local: [${fileInfo.tempPath}] -> Remote: [${fileInfo.remotePath}]`, 'info');
+
             await this.sftpManager.writeFile(fileInfo.remotePath, document.getText());
             
             // 更新状态栏消息
-            this.statusBarItem.text = `$(check) Uploaded to ${fileInfo.serverConfig.name}`;
+            this.statusBarItem.text = `$(check) Uploaded to [${this.currentServer?.name}]`;
             setTimeout(() => this.statusBarItem.hide(), 3000);
 
-            this.log(`File uploaded successfully:
-Local: ${fileInfo.tempPath}
-Remote: ${fileInfo.remotePath}`, 'info');
+            this.log(`[${this.currentServer?.name}] File uploaded successfully `, 'info');
         } catch (error: any) {
             // 显示错误状态
             this.statusBarItem.text = `$(error) Upload failed`;
             setTimeout(() => this.statusBarItem.hide(), 3000);
-            this.log(`Failed to upload file: ${error.message}`, 'error');
+            this.log(`[${this.currentServer?.name}] Failed to upload file : ${error.message}`, 'error');
         }
     }
 
@@ -369,7 +429,13 @@ Remote: ${fileInfo.remotePath}`, 'info');
         const fileInfo = this.remoteFiles.get(uri);
         if (fileInfo) {
             // 更新上传按钮的标题
-            vscode.commands.executeCommand('setContext', 'sftp-tools.serverName', fileInfo.serverConfig.name);
+            const serverDisplay = this.getServerDisplayName(fileInfo.serverConfig);
+            vscode.commands.executeCommand('setContext', 'sftp-tools.isRemoteFile', true);
+            // 更新命令标题
+            vscode.commands.executeCommand('setCommand', 'sftp-tools.uploadFile', {
+                title: `Upload to [${this.currentServer?.name}]`,
+                tooltip: `Upload to [${this.currentServer?.name}]`
+            });
             return true;
         }
         return false;
@@ -377,6 +443,94 @@ Remote: ${fileInfo.remotePath}`, 'info');
 
     getFileInfo(uri: string) {
         return this.remoteFiles.get(uri);
+    }
+
+    // 获取所有服务器配置
+    public getServers(): ServerConfig[] {
+        const config = vscode.workspace.getConfiguration('sftp-tools');
+        return config.get('servers') || [];
+    }
+
+    // 上传到指定服务器
+    async uploadToServer(document: vscode.TextDocument, serverConfig: ServerConfig) {
+        try {
+            // 显示状态栏消息
+            this.statusBarItem.text = `$(cloud-upload) Uploading to [${serverConfig.name}]`;
+            this.statusBarItem.show();
+
+            // 连接到指定服务器
+            const tempManager = new SftpManager();
+            await tempManager.connect(serverConfig);
+
+            // 构建远程路径 - 使用文件名
+            const fileName = path.basename(document.uri.fsPath);
+            const remotePath = path.join(serverConfig.remotePath, fileName).replace(/\\/g, '/');
+
+            this.log(`[${serverConfig.name}] Uploading local file to:
+Remote path: ${remotePath}`, 'info');
+
+            // 上传文件
+            await tempManager.writeFile(remotePath, document.getText());
+            
+            // 更新状态栏消息
+            this.statusBarItem.text = `$(check) Uploaded to [${serverConfig.name}]`;
+            setTimeout(() => this.statusBarItem.hide(), 3000);
+
+            this.log(`[${serverConfig.name}] File uploaded successfully`, 'info');
+
+            // 断开连接
+            tempManager.disconnect();
+        } catch (error: any) {
+            this.statusBarItem.text = `$(error) Upload failed`;
+            setTimeout(() => this.statusBarItem.hide(), 3000);
+            this.log(`[${serverConfig.name}] Failed to upload file: ${error.message}`, 'error');
+        }
+    }
+
+    // 上传到所有服务器
+    async uploadToAllServers(document: vscode.TextDocument) {
+        const servers = this.getServers();
+        if (servers.length === 0) {
+            vscode.window.showInformationMessage('No servers configured');
+            return;
+        }
+
+        let successCount = 0;
+        let failCount = 0;
+
+        // 显示进度
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Uploading to all servers",
+            cancellable: false
+        }, async (progress) => {
+            const total = servers.length;
+            
+            for (let i = 0; i < servers.length; i++) {
+                const server = servers[i];
+                progress.report({ 
+                    message: `Uploading to ${server.name} (${i + 1}/${total})`,
+                    increment: (100 / total)
+                });
+
+                try {
+                    await this.uploadToServer(document, server);
+                    successCount++;
+                } catch (error: any) {
+                    failCount++;
+                    this.log(`Failed to upload to ${server.name}: ${error.message}`, 'error');
+                }
+            }
+        });
+
+        // 显示结果
+        if (failCount === 0) {
+            vscode.window.showInformationMessage(`Successfully uploaded to ${successCount} servers`);
+        } else {
+            vscode.window.showWarningMessage(
+                `Upload completed with ${successCount} successes and ${failCount} failures. Check output for details.`
+            );
+        }
     }
 }
 

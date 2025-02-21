@@ -2,7 +2,16 @@
   "name": "sftp-tools",
   "displayName": "SFTP Tools",
   "description": "a nice sftp tools for vscode",
+  "publisher": "caoayu",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayuayue/sftp-tools.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ayuayue/sftp-tools/issues"
+  },
+  "homepage": "https://github.com/ayuayue/sftp-tools#readme",
   "engines": {
     "vscode": "^1.93.0"
   },
@@ -58,15 +67,26 @@
       },
       {
         "command": "sftp-tools.uploadFile",
-        "title": "%uploadFileCommand%",
-        "icon": {
-            "light": "$(cloud-upload)",
-            "dark": "$(cloud-upload)"
-        }
+        "title": "Upload to Active Server",
+        "icon": "$(cloud-upload)",
+        "enablement": "sftp-tools.isRemoteFile"
       },
       {
         "command": "sftp-tools.openFileNonPreview",
         "title": "Open File (Non-Preview)"
+      },
+      {
+        "command": "sftp-tools.uploadToServer",
+        "title": "Upload to Other Server"
+      },
+      {
+        "command": "sftp-tools.disconnectServer",
+        "title": "Disconnect Server",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "sftp-tools.uploadToAllServers",
+        "title": "Upload to All Servers"
       }
     ],
     "configuration": {
@@ -148,6 +168,11 @@
           "command": "sftp-tools.openFileNonPreview",
           "when": "view == sftp-tools-explorer && viewItem == file",
           "group": "navigation"
+        },
+        {
+          "command": "sftp-tools.disconnectServer",
+          "when": "view == sftp-tools-servers && viewItem == activeServer",
+          "group": "inline"
         }
       ],
       "editor/title": [
@@ -155,6 +180,30 @@
           "command": "sftp-tools.uploadFile",
           "when": "sftp-tools.isRemoteFile",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "sftp-tools.uploadSubmenu",
+          "when": "resourceScheme == file || sftp-tools.isRemoteFile",
+          "group": "sftp-tools@1"
+        }
+      ],
+      "sftp-tools.uploadSubmenu": [
+        {
+          "command": "sftp-tools.uploadFile",
+          "when": "sftp-tools.isRemoteFile",
+          "group": "upload@1"
+        },
+        {
+          "command": "sftp-tools.uploadToServer",
+          "when": "resourceScheme == file",
+          "group": "upload@2"
+        },
+        {
+          "command": "sftp-tools.uploadToAllServers",
+          "when": "resourceScheme == file",
+          "group": "upload@3"
         }
       ]
     },
@@ -181,7 +230,13 @@
           "type": "tree"
         }
       ]
-    }
+    },
+    "submenus": [
+      {
+        "id": "sftp-tools.uploadSubmenu",
+        "label": "SFTP-Tools Upload"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

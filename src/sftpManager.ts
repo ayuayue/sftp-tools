@@ -1,5 +1,4 @@
 import * as ssh2 from 'ssh2';
-import * as vscode from 'vscode';
 
 export class SftpManager {
     private client: ssh2.Client | null = null;

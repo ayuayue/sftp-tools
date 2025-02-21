@@ -1,71 +1,83 @@
-# sftp-tools README
+# SFTP Tools
 
-This is the README for your extension "sftp-tools". After writing up a brief description, we recommend including the following sections.
+SFTP Tools 是一个用于 VS Code 的 SFTP 客户端扩展，提供了简单直观的远程文件管理功能。
 
-## Features
+## 功能特点
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### 服务器管理
+- 支持多服务器配置
+- 服务器连接状态显示
+- 防止重复服务器名称
+- 支持编辑和删除服务器配置
 
-For example if there is an image subfolder under your extension project workspace:
+### 文件操作
+- 浏览远程文件和目录
+- 单击预览/双击打开文件
+- 自动检测文件类型并应用语法高亮
+- 文件修改后一键上传
+- 自动备份原文件（创建 .bak 文件）
 
-\!\[feature X\]\(images/feature-x.png\)
+### 用户界面
+- 服务器列表视图
+- 文件浏览器视图
+- 状态栏上传进度提示
+- 详细的操作日志输出
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## 使用方法
 
-## Requirements
+### 添加服务器
+1. 点击服务器视图中的 "+" 按钮
+2. 依次输入以下信息：
+   - 服务器名称（唯一标识）
+   - 主机地址
+   - 端口号（默认 22）
+   - 用户名
+   - 密码
+   - 远程根目录
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+### 连接服务器
+1. 在服务器列表中点击要连接的服务器
+2. 连接成功后服务器图标会显示对勾标记
+3. 文件浏览器会显示远程目录内容
 
-## Extension Settings
+### 文件操作
+- 单击文件：预览模式打开
+- 双击文件：新标签页打开
+- 编辑后点击上传按钮：保存到远程服务器
+- 关闭文件：自动清理临时文件
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+## 扩展设置
 
-For example:
+此扩展提供以下设置：
 
-This extension contributes the following settings:
+* `sftp-tools.servers`: 服务器配置列表，包含：
+  - `name`: 服务器名称
+  - `host`: 主机地址
+  - `port`: 端口号
+  - `username`: 用户名
+  - `password`: 密码
+  - `remotePath`: 远程根目录
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## 注意事项
 
-## Known Issues
+1. 服务器名称不能重复
+2. 密码明文存储，请注意安全
+3. 建议使用绝对路径作为远程根目录
+4. 上传时会自动创建 .bak 备份文件
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+## 更新日志
 
-## Release Notes
+### 0.0.1
+- 初始版本发布
+- 基本的 SFTP 功能支持
+- 多服务器管理
+- 文件预览和编辑
+- 自动备份功能
 
-Users appreciate release notes as you update your extension.
+## 问题反馈
 
-### 1.0.0
+如果您在使用过程中遇到任何问题，或有功能建议，请在 GitHub 仓库提交 Issue。
 
-Initial release of ...
+## 许可证
 
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+[MIT](https://github.com/ayuayue/sftp-tools/blob/main/LICENSE)
