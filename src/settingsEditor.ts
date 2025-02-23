@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ServerItem } from './sftpViewProvider';
+import path from 'path';
 
 export class SettingsEditorProvider {
     public static readonly viewType = 'sftp-tools.settingsEditor';
@@ -7,7 +8,38 @@ export class SettingsEditorProvider {
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-    ) { }
+    ) {
+        this._registerCommands();
+    }
+
+    private _registerCommands() {
+        // vscode.commands.registerCommand('sftp-tools.deleteRemoteFile', this.deleteRemoteFile.bind(this));
+        // vscode.commands.registerCommand('sftp-tools.downloadRemoteFile', this.downloadRemoteFile.bind(this));
+    }
+
+    private async deleteRemoteFile(fileUri: vscode.Uri) {
+        const confirmDelete = await vscode.window.showWarningMessage(
+            'Are you sure you want to delete this remote file?',
+            'Yes', 'No'
+        );
+        if (confirmDelete === 'Yes') {
+            // 这里调用删除文件的 API
+            // 例如: await this.sftpClient.delete(fileUri);
+            vscode.window.showInformationMessage(`Deleted remote file: ${fileUri.fsPath}`);
+        }
+    }
+
+    private async downloadRemoteFile(fileUri: vscode.Uri) {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder found.');
+            return;
+        }
+        const localPath = path.join(workspaceFolder.uri.fsPath, fileUri.fsPath.split('/').pop()!);
+        // 这里调用下载文件的 API
+        // 例如: await this.sftpClient.download(fileUri, localPath);
+        vscode.window.showInformationMessage(`Downloaded remote file to: ${localPath}`);
+    }
 
     public async showSettingsEditor(serverToEdit?: ServerItem) {
         if (this._view) {
@@ -60,20 +92,27 @@ export class SettingsEditorProvider {
                         vscode.window.showInformationMessage('Settings saved successfully!');
                         break;
                     case 'confirmDelete':
-                        const answer = await vscode.window.showWarningMessage(
+                        const confirmDeleteAnswer = await vscode.window.showWarningMessage(
                             'Are you sure you want to delete this server?',
                             'Yes',
                             'No'
                         );
-                        if (answer === 'Yes') {
+                        if (confirmDeleteAnswer === 'Yes') {
                             this._view?.webview.postMessage({
                                 command: 'deleteConfirmed',
                                 index: message.index
                             });
                         }
                         break;
+                    case 'setPaths':
+                        await this._setPaths(message.localPath, message.remotePath, message.serverId);
+                        break;
                     default:
-                        console.log('Unknown command:', message.command);
+                        const errorAnswer = await vscode.window.showWarningMessage(
+                            'Invalid command received. Please check your input.',
+                            'OK'
+                        );
+                        this._view?.webview.postMessage({ command: 'error', message: errorAnswer });
                 }
             } catch (error) {
                 console.error('Error handling message:', error);
@@ -82,9 +121,32 @@ export class SettingsEditorProvider {
         });
     }
 
-    private async _saveSettings(servers: any[]) {
+    public async _saveSettings(servers: any[]) {
         const config = vscode.workspace.getConfiguration('sftp-tools');
         await config.update('servers', servers, vscode.ConfigurationTarget.Global);
+    }
+
+    private async _setPaths(localPath: string, remotePath: string, serverId?: string) {
+        const config = vscode.workspace.getConfiguration('sftp-tools');
+        const servers = config.get('servers') as Array<{
+            id: string;
+            localPath: string;
+            remotePath: string;
+        }> || [];
+        
+        if (serverId) {
+            const serverIndex = servers.findIndex(s => s.id === serverId);
+            if (serverIndex !== -1) {
+                servers[serverIndex].localPath = localPath;
+                servers[serverIndex].remotePath = remotePath;
+                await config.update('servers', servers, vscode.ConfigurationTarget.Global);
+            }
+        } else {
+            await config.update('localPath', localPath, vscode.ConfigurationTarget.Global);
+            await config.update('remotePath', remotePath, vscode.ConfigurationTarget.Global);
+        }
+        
+        vscode.window.showInformationMessage('Paths set successfully!');
     }
 
     private _getHtmlForWebview(): string {
@@ -179,15 +241,17 @@ export class SettingsEditorProvider {
                     <div id="emptyState" class="empty-state">
                         <div class="empty-state-text">还没有配置任何服务器</div>
                         <div class="empty-state-tip">
-                            点击右下角 <span class="highlight">添加服务器</span> 按钮开始配置
+                            点击右上角 <span class="highlight">添加服务器</span> 按钮开始配置
                         </div>
                         <div class="empty-state-tip">
                             配置完成后点击 <span class="highlight">保存全部</span> 按钮保存更改
                         </div>
                     </div>
+                    <div class="form-group">
+                        <button id="addServerBtn">添加服务器</button>
+                    </div>
                 </div>
                 <div class="global-actions" id="globalActions">
-                    <button id="addServerBtn">添加服务器</button>
                     <button id="saveSettingsBtn">保存全部</button>
                 </div>
                 <script nonce="${nonce}">
@@ -235,32 +299,38 @@ export class SettingsEditorProvider {
                                 serverDiv.className = 'server-item';
                                 serverDiv.dataset.serverName = server.name;
                                 serverDiv.innerHTML = \`
-                                    <div class="form-group">
-                                        <label>Name:</label>
-                                        <input type="text" value="\${server.name}" data-index="\${index}" data-field="name">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Host:</label>
-                                        <input type="text" value="\${server.host}" data-index="\${index}" data-field="host">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Port:</label>
-                                        <input type="number" value="\${server.port}" data-index="\${index}" data-field="port">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Username:</label>
-                                        <input type="text" value="\${server.username}" data-index="\${index}" data-field="username">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Password:</label>
-                                        <input type="password" value="\${server.password}" data-index="\${index}" data-field="password">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Remote Path:</label>
-                                        <input type="text" value="\${server.remotePath}" data-index="\${index}" data-field="remotePath">
-                                    </div>
-                                    <div class="actions">
-                                        <button class="deleteBtn" data-index="\${index}">Delete</button>
+                                    <div class="server-form">
+                                        <div class="form-group">
+                                            <label>Name:</label>
+                                            <input type="text" value="\${server.name}" data-index="\${index}" data-field="name">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Host:</label>
+                                            <input type="text" value="\${server.host}" data-index="\${index}" data-field="host">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Port:</label>
+                                            <input type="number" value="\${server.port}" data-index="\${index}" data-field="port">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Username:</label>
+                                            <input type="text" value="\${server.username}" data-index="\${index}" data-field="username">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Password:</label>
+                                            <input type="password" value="\${server.password}" data-index="\${index}" data-field="password">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>本地工作区目录:</label>
+                                            <input type="text" value="\${server.localPath}" data-index="\${index}" data-field="localPath" placeholder="输入本地工作区目录">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>远程目录:</label>
+                                            <input type="text" value="\${server.remotePath}" data-index="\${index}" data-field="remotePath" placeholder="输入远程目录">
+                                        </div>
+                                        <div class="actions">
+                                            <button class="deleteBtn" data-index="\${index}">Delete</button>
+                                        </div>
                                     </div>
                                 \`;
 
@@ -310,6 +380,7 @@ export class SettingsEditorProvider {
                             port: 22,
                             username: '',
                             password: '',
+                            localPath: '',
                             remotePath: '/'
                         });
                         renderServers();

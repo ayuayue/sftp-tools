@@ -129,6 +129,16 @@ export function activate(context: vscode.ExtensionContext) {
 			if (editor) {
 				sftpExplorerProvider.uploadToAllServers(editor.document);
 			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.downloadRemoteFile', (item) => {
+			if (item) {
+				sftpExplorerProvider.downloadRemoteFile(item);
+			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.deleteRemoteFile', (item) => {
+			if (item) {
+				sftpExplorerProvider.deleteRemoteFile(item);
+			}
 		})
 	);
 

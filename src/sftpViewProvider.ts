@@ -532,6 +532,89 @@ Remote path: ${remotePath}`, 'info');
             );
         }
     }
+
+    async downloadRemoteFile(item: ExplorerItem) {
+        try {
+            if (!this.currentServer) {
+                throw new Error('No server connected');
+            }
+
+            // 获取文件内容
+            const content = await this.sftpManager.readFile(item.path);
+
+            // 计算相对路径：从远程根路径到文件的相对路径
+            let relativePath = item.path;
+            if (item.path.startsWith(this.currentServer.remotePath)) {
+                relativePath = item.path.substring(this.currentServer.remotePath.length);
+            }
+            // 确保路径分隔符正确且移除开头的斜杠
+            relativePath = relativePath.replace(/^\/+/, '').replace(/\\/g, '/');
+
+            // 获取工作区根目录
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            let localPath: string;
+
+            if (workspaceFolder) {
+                // 如果有工作区，使用工作区路径
+                localPath = path.join(workspaceFolder.uri.fsPath, relativePath);
+            } else {
+                // 如果没有工作区，让用户选择保存位置
+                const defaultPath = path.join(os.homedir(), relativePath);
+                const uri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file(defaultPath),
+                    filters: {
+                        'All Files': ['*']
+                    }
+                });
+
+                if (!uri) {
+                    return; // 用户取消了保存
+                }
+                localPath = uri.fsPath;
+            }
+
+            // 确保目标目录存在
+            const targetDir = path.dirname(localPath);
+            if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+            }
+
+            // 写入文件
+            await vscode.workspace.fs.writeFile(vscode.Uri.file(localPath), Buffer.from(content));
+            
+            this.log(`[${this.currentServer.name}] File downloaded successfully to ${localPath}`, 'info');
+            vscode.window.showInformationMessage(`文件已下载到: ${localPath}`);
+        } catch (error: any) {
+            this.log(`[${this.currentServer?.name}] Failed to download file: ${error.message}`, 'error');
+            vscode.window.showErrorMessage(`下载文件失败: ${error.message}`);
+        }
+    }
+    
+    async deleteRemoteFile(item: ExplorerItem) {
+        try {
+            if (!this.currentServer) {
+                throw new Error('No server connected');
+            }
+    
+            // 确认删除
+            const answer = await vscode.window.showWarningMessage(
+                `Are you sure you want to delete "${item.label}"?`,
+                'Yes',
+                'No'
+            );
+    
+            if (answer === 'Yes') {
+                // 删除文件
+                await this.sftpManager.deleteFile(item.path);
+                this.log(`[${this.currentServer.name}] File deleted successfully: ${item.path}`, 'info');
+                vscode.window.showInformationMessage('File deleted successfully');
+                this.refresh(); // 刷新文件列表
+            }
+        } catch (error: any) {
+            this.log(`[${this.currentServer?.name}] Failed to delete file: ${error.message}`, 'error');
+            vscode.window.showErrorMessage(`Failed to delete file: ${error.message}`);
+        }
+    }
 }
 
 export class ExplorerItem extends vscode.TreeItem {

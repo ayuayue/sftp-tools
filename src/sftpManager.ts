@@ -89,7 +89,22 @@ export class SftpManager {
             });
         });
     }
-
+    async deleteFile(path: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+    
+            this.sftp.unlink(path, (err: any) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve();
+            });
+        });
+    }
     disconnect() {
         if (this.client) {
             this.client.end();

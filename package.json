@@ -87,6 +87,16 @@
       {
         "command": "sftp-tools.uploadToAllServers",
         "title": "Upload to All Servers"
+      },
+      {
+        "command": "sftp-tools.deleteRemoteFile",
+        "title": "Delete Remote File",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sftp-tools.downloadRemoteFile",
+        "title": "Download Remote File",
+        "icon": "$(cloud-download)"
       }
     ],
     "configuration": {
@@ -173,6 +183,15 @@
           "command": "sftp-tools.disconnectServer",
           "when": "view == sftp-tools-servers && viewItem == activeServer",
           "group": "inline"
+        },{
+          "command": "sftp-tools.downloadRemoteFile",
+          "when": "view == sftp-tools-explorer && viewItem == file",
+          "group": "1_modification"
+        },
+        {
+          "command": "sftp-tools.deleteRemoteFile",
+          "when": "view == sftp-tools-explorer && viewItem == file",
+          "group": "1_modification"
         }
       ],
       "editor/title": [
@@ -204,6 +223,18 @@
           "command": "sftp-tools.uploadToAllServers",
           "when": "resourceScheme == file",
           "group": "upload@3"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "sftp-tools.deleteRemoteFile",
+          "when": "resourceScheme == 'sftp'",
+          "group": "2_modification"
+        },
+        {
+          "command": "sftp-tools.downloadRemoteFile",
+          "when": "resourceScheme == 'sftp'",
+          "group": "2_modification"
         }
       ]
     },
