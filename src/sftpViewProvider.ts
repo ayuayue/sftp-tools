@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { time } from 'console';
+import { StatusBarManager } from './statusBarManager';
 
 interface ServerConfig {
     name: string;
@@ -204,6 +205,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     private outputChannel: vscode.OutputChannel;
     private statusBarItem: vscode.StatusBarItem;
     private serversProvider: SftpServersProvider;  // 添加引用
+    private statusBar: StatusBarManager = StatusBarManager.getInstance();
 
     constructor(serversProvider: SftpServersProvider) {  // 通过构造函数注入
         this.serversProvider = serversProvider;
@@ -454,9 +456,8 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     // 上传到指定服务器
     async uploadToServer(document: vscode.TextDocument, serverConfig: ServerConfig) {
         try {
-            // 显示状态栏消息
-            this.statusBarItem.text = `$(cloud-upload) Uploading to [${serverConfig.name}]`;
-            this.statusBarItem.show();
+            this.statusBar.showProgress(`正在上传到 [${serverConfig.name}]...`);
+            this.log(`[${serverConfig.name}] Uploading local file to remote server`, 'info');
 
             // 连接到指定服务器
             const tempManager = new SftpManager();
@@ -466,24 +467,17 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             const fileName = path.basename(document.uri.fsPath);
             const remotePath = path.join(serverConfig.remotePath, fileName).replace(/\\/g, '/');
 
-            this.log(`[${serverConfig.name}] Uploading local file to:
-Remote path: ${remotePath}`, 'info');
-
             // 上传文件
             await tempManager.writeFile(remotePath, document.getText());
             
-            // 更新状态栏消息
-            this.statusBarItem.text = `$(check) Uploaded to [${serverConfig.name}]`;
-            setTimeout(() => this.statusBarItem.hide(), 3000);
-
             this.log(`[${serverConfig.name}] File uploaded successfully`, 'info');
+            this.statusBar.showMessage(`文件已上传到 [${serverConfig.name}]`, 'info');
 
             // 断开连接
             tempManager.disconnect();
         } catch (error: any) {
-            this.statusBarItem.text = `$(error) Upload failed`;
-            setTimeout(() => this.statusBarItem.hide(), 3000);
             this.log(`[${serverConfig.name}] Failed to upload file: ${error.message}`, 'error');
+            this.statusBar.showMessage(`上传失败: ${error.message}`, 'error');
         }
     }
 
@@ -539,6 +533,8 @@ Remote path: ${remotePath}`, 'info');
                 throw new Error('No server connected');
             }
 
+            this.statusBar.showProgress(`正在下载文件...`);
+
             // 获取文件内容
             const content = await this.sftpManager.readFile(item.path);
 
@@ -583,10 +579,10 @@ Remote path: ${remotePath}`, 'info');
             await vscode.workspace.fs.writeFile(vscode.Uri.file(localPath), Buffer.from(content));
             
             this.log(`[${this.currentServer.name}] File downloaded successfully to ${localPath}`, 'info');
-            vscode.window.showInformationMessage(`文件已下载到: ${localPath}`);
+            this.statusBar.showMessage(`文件已下载到: ${localPath}`, 'info');
         } catch (error: any) {
             this.log(`[${this.currentServer?.name}] Failed to download file: ${error.message}`, 'error');
-            vscode.window.showErrorMessage(`下载文件失败: ${error.message}`);
+            this.statusBar.showMessage(`下载失败: ${error.message}`, 'error');
         }
     }
     
@@ -595,25 +591,32 @@ Remote path: ${remotePath}`, 'info');
             if (!this.currentServer) {
                 throw new Error('No server connected');
             }
-    
+
             // 确认删除
             const answer = await vscode.window.showWarningMessage(
-                `Are you sure you want to delete "${item.label}"?`,
-                'Yes',
-                'No'
+                `确定要删除文件 "${item.label}" 吗？`,
+                '确定',
+                '取消'
             );
-    
-            if (answer === 'Yes') {
+
+            if (answer === '确定') {
+                this.statusBar.showProgress(`正在删除文件...`);
+                
                 // 删除文件
                 await this.sftpManager.deleteFile(item.path);
                 this.log(`[${this.currentServer.name}] File deleted successfully: ${item.path}`, 'info');
-                vscode.window.showInformationMessage('File deleted successfully');
+                this.statusBar.showMessage(`文件已删除`, 'info');
                 this.refresh(); // 刷新文件列表
             }
         } catch (error: any) {
             this.log(`[${this.currentServer?.name}] Failed to delete file: ${error.message}`, 'error');
-            vscode.window.showErrorMessage(`Failed to delete file: ${error.message}`);
+            this.statusBar.showMessage(`删除失败: ${error.message}`, 'error');
         }
+    }
+
+    // 获取当前活动的服务器
+    public getCurrentServer(): ServerConfig | undefined {
+        return this.currentServer;
     }
 }
 

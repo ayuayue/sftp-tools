@@ -66,11 +66,41 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('sftp-tools.openFile', (item) => {
 			sftpExplorerProvider.openFile(item, false);
 		}),
-		vscode.commands.registerCommand('sftp-tools.uploadFile', () => {
+		vscode.commands.registerCommand('sftp-tools.uploadFile', async () => {
 			const editor = vscode.window.activeTextEditor;
-			if (editor) {
-				sftpExplorerProvider.uploadFile(editor.document);
+			if (!editor) {
+				return;
 			}
+
+			const servers = sftpExplorerProvider.getServers();
+			if (servers.length === 0) {
+				const answer = await vscode.window.showInformationMessage(
+					'还没有配置任何服务器，是否现在配置？',
+					'配置服务器',
+					'取消'
+				);
+				
+				if (answer === '配置服务器') {
+					vscode.commands.executeCommand('sftp-tools.openSettingsEditor');
+				}
+				return;
+			}
+
+			const currentServer = sftpExplorerProvider.getCurrentServer();
+			if (!currentServer) {
+				const answer = await vscode.window.showInformationMessage(
+					'没有连接到任何服务器，请先连接一个服务器',
+					'选择服务器',
+					'取消'
+				);
+				
+				if (answer === '选择服务器') {
+					vscode.commands.executeCommand('sftp-tools.uploadToServer');
+				}
+				return;
+			}
+
+			await sftpExplorerProvider.uploadToServer(editor.document, currentServer);
 		}),
 		vscode.commands.registerCommand('sftp-tools.openFileNonPreview', (item) => {
 			sftpExplorerProvider.openFile(item, true);
@@ -102,7 +132,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const servers = sftpExplorerProvider.getServers();
 			if (servers.length === 0) {
-				vscode.window.showInformationMessage('No servers configured');
+				vscode.window.showInformationMessage('没有配置任何服务器');
 				return;
 			}
 
@@ -114,10 +144,13 @@ export function activate(context: vscode.ExtensionContext) {
 			}));
 
 			const selected = await vscode.window.showQuickPick(items, {
-				placeHolder: 'Select server to upload to'
+				placeHolder: '选择要上传到的服务器'
 			});
 
 			if (selected) {
+				// 先连接并激活服务器
+				await sftpExplorerProvider.connectToServer(selected.server);
+				// 然后上传文件
 				await sftpExplorerProvider.uploadToServer(editor.document, selected.server);
 			}
 		}),

@@ -1,9 +1,32 @@
 {
   "name": "sftp-tools",
   "displayName": "SFTP Tools",
-  "description": "a nice sftp tools for vscode",
+  "description": "A powerful SFTP/FTP client for VS Code with an intuitive interface",
   "publisher": "caoayu",
   "version": "0.0.1",
+  "author": {
+    "name": "caoayu",
+    "email": "caoayu80@gmail.com"
+  },
+  "license": "MIT",
+  "icon": "media/sftp.png",
+  "galleryBanner": {
+    "color": "#C80000",
+    "theme": "dark"
+  },
+  "keywords": [
+    "sftp",
+    "ftp",
+    "remote",
+    "upload",
+    "download",
+    "sync",
+    "file transfer"
+  ],
+  "categories": [
+    "Other",
+    "SCM Providers"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/ayuayue/sftp-tools.git"
@@ -15,9 +38,6 @@
   "engines": {
     "vscode": "^1.93.0"
   },
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [
     "onStartupFinished"
     
@@ -67,9 +87,8 @@
       },
       {
         "command": "sftp-tools.uploadFile",
-        "title": "Upload to Active Server",
-        "icon": "$(cloud-upload)",
-        "enablement": "sftp-tools.isRemoteFile"
+        "title": "上传到当前服务器",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "sftp-tools.openFileNonPreview",
@@ -77,7 +96,8 @@
       },
       {
         "command": "sftp-tools.uploadToServer",
-        "title": "Upload to Other Server"
+        "title": "上传到其他服务器...",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "sftp-tools.disconnectServer",
@@ -86,7 +106,8 @@
       },
       {
         "command": "sftp-tools.uploadToAllServers",
-        "title": "Upload to All Servers"
+        "title": "上传到所有服务器",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "sftp-tools.deleteRemoteFile",
@@ -197,30 +218,33 @@
       "editor/title": [
         {
           "command": "sftp-tools.uploadFile",
-          "when": "sftp-tools.isRemoteFile",
+          "when": "resourceScheme == file",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
           "submenu": "sftp-tools.uploadSubmenu",
-          "when": "resourceScheme == file || sftp-tools.isRemoteFile",
+          "when": "resourceScheme == file",
           "group": "sftp-tools@1"
         }
       ],
       "sftp-tools.uploadSubmenu": [
         {
           "command": "sftp-tools.uploadFile",
-          "when": "sftp-tools.isRemoteFile",
+          "title": "上传到当前服务器",
+          "when": "resourceScheme == file",
           "group": "upload@1"
         },
         {
           "command": "sftp-tools.uploadToServer",
+          "title": "上传到其他服务器...",
           "when": "resourceScheme == file",
           "group": "upload@2"
         },
         {
           "command": "sftp-tools.uploadToAllServers",
+          "title": "上传到所有服务器",
           "when": "resourceScheme == file",
           "group": "upload@3"
         }
