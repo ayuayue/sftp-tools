@@ -3,7 +3,7 @@
   "displayName": "SFTP Tools",
   "description": "A powerful SFTP/FTP client for VS Code with an intuitive interface",
   "publisher": "caoayu",
-  "version": "0.0.1",
+  "version": "1.0.1",
   "author": {
     "name": "caoayu",
     "email": "caoayu80@gmail.com"
