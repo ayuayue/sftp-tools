@@ -40,10 +40,7 @@
     "vscode": "^1.93.0"
   },
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:sftp-tools.openSettingsEditor",
-    "onView:sftp-tools-servers",
-    "onView:sftp-tools-explorer"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -76,8 +73,7 @@
       {
         "command": "sftp-tools.openSettingsEditor",
         "title": "Open Settings Editor",
-        "icon": "$(gear)",
-        "category": "SFTP Tools"
+        "icon": "$(gear)"
       },
       {
         "command": "sftp-tools.refreshServers",
@@ -122,11 +118,23 @@
         "command": "sftp-tools.downloadRemoteFile",
         "title": "Download Remote File",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "sftp-tools.cancelOperations",
+        "title": "取消操作",
+        "icon": "$(stop-circle)",
+        "category": "SFTP Tools"
       }
     ],
     "configuration": {
       "title": "SFTP Tools",
       "properties": {
+        "sftp-tools.showConfirmDialog": {
+          "type": "boolean",
+          "default": true,
+          "description": "删除文件时是否显示确认对话框",
+          "markdownDescription": "删除文件或目录时是否显示确认对话框。\n- `true`: 删除前显示确认对话框\n- `false`: 直接删除，不显示确认"
+        },
         "sftp-tools.servers": {
           "type": "array",
           "default": [],
@@ -186,6 +194,11 @@
           "command": "sftp-tools.openSettingsEditor",
           "when": "view == sftp-tools-servers",
           "group": "navigation"
+        },
+        {
+          "command": "sftp-tools.cancelOperations",
+          "when": "view == sftp-tools-explorer && sftp-tools.hasActiveOperations",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -215,7 +228,7 @@
         },
         {
           "command": "sftp-tools.deleteRemoteFile",
-          "when": "view == sftp-tools-explorer && viewItem == file",
+          "when": "view == sftp-tools-explorer && (viewItem == file || viewItem == directory)",
           "group": "1_modification"
         }
       ],

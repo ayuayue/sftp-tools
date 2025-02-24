@@ -200,12 +200,14 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     private remoteFiles = new Map<string, {
         remotePath: string;
         serverConfig: ServerConfig;
-        tempPath?: string;  // 添加临时文件路径
+        tempPath?: string;
+        tempDir?: string;  // 添加临时目录记录
     }>();
     private outputChannel: vscode.OutputChannel;
     private statusBarItem: vscode.StatusBarItem;
     private serversProvider: SftpServersProvider;  // 添加引用
     private statusBar: StatusBarManager = StatusBarManager.getInstance();
+    private hasActiveOperations: boolean = false;
 
     constructor(serversProvider: SftpServersProvider) {  // 通过构造函数注入
         this.serversProvider = serversProvider;
@@ -323,8 +325,15 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             if (!fs.existsSync(tmpDir)) {
                 fs.mkdirSync(tmpDir, { recursive: true });
             }
-            // 使用完整路径作为文件名以保持唯一性
-            const tempPath = path.join(tmpDir, `~${item.label.replace(/[\/\\]/g, '_')}`);
+            
+            // 保持远程目录结构
+            const remoteDir = path.dirname(item.path);
+            const tempWorkDir = path.join(tmpDir, this.currentServer.name, remoteDir);
+            if (!fs.existsSync(tempWorkDir)) {
+                fs.mkdirSync(tempWorkDir, { recursive: true });
+            }
+            
+            const tempPath = path.join(tempWorkDir, item.label);
             
             // 获取并写入文件内容
             const content = await this.sftpManager.readFile(item.path);
@@ -335,11 +344,12 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             // 打开文件
             const doc = await vscode.workspace.openTextDocument(tempPath);
             
-            // 存储文件信息（在显示之前）
+            // 存储文件信息
             this.remoteFiles.set(doc.uri.toString(), {
                 remotePath: item.path,
                 serverConfig: this.currentServer,
-                tempPath: tempPath
+                tempPath: tempPath,
+                tempDir: tmpDir  // 记录临时根目录
             });
             
             // 设置语言
@@ -379,37 +389,48 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
         return `${server.name} (${server.host}:${server.port})`;
     }
 
+    private setOperationStatus(active: boolean) {
+        this.hasActiveOperations = active;
+        vscode.commands.executeCommand('setContext', 'sftp-tools.hasActiveOperations', active);
+    }
+
+    cancelOperations() {
+        this.sftpManager.cancelOperations();
+        this.setOperationStatus(false);
+        this.statusBar.showMessage('操作已取消', 'info');
+    }
+
     async uploadFile(document: vscode.TextDocument) {
-        const uri = document.uri.toString();
-        const fileInfo = this.remoteFiles.get(uri);
-        
-        if (!fileInfo) {
-            this.log(`[${this.currentServer?.name}] No remote file information found for: ${uri}`, 'error');
-            return;
-        }
-
-        const serverDisplay = this.getServerDisplayName(fileInfo.serverConfig);
-
         try {
-            // 显示状态栏消息
-            this.statusBarItem.text = `$(cloud-upload) Uploading to [${this.currentServer?.name}]`;
-            this.statusBarItem.show();
+            this.setOperationStatus(true);
+            const uri = document.uri.toString();
+            const fileInfo = this.remoteFiles.get(uri);
+            
+            if (!fileInfo) {
+                // 如果不是远程文件，使用工作区路径上传
+                this.log(`[${this.currentServer?.name}] 开始上传本地文件: ${document.uri.fsPath}`, 'info');
+                await this.uploadToServer(document, this.currentServer!);
+                return;
+            }
 
-            this.log(`[${this.currentServer?.name}] Uploading:
- Local: [${fileInfo.tempPath}] -> Remote: [${fileInfo.remotePath}]`, 'info');
+            // 如果是临时文件，去除临时目录前缀
+            let localPath = document.uri.fsPath;
+            if (fileInfo.tempDir && localPath.startsWith(fileInfo.tempDir)) {
+                localPath = localPath.substring(fileInfo.tempDir.length);
+            }
+
+            const serverDisplay = this.getServerDisplayName(fileInfo.serverConfig);
+            this.statusBar.showProgress(`正在上传到 [${serverDisplay}]...`);
+            this.log(`[${this.currentServer?.name}] 开始上传文件:
+本地路径: ${localPath}
+远程路径: ${fileInfo.remotePath}`, 'info');
 
             await this.sftpManager.writeFile(fileInfo.remotePath, document.getText());
             
-            // 更新状态栏消息
-            this.statusBarItem.text = `$(check) Uploaded to [${this.currentServer?.name}]`;
-            setTimeout(() => this.statusBarItem.hide(), 3000);
-
-            this.log(`[${this.currentServer?.name}] File uploaded successfully `, 'info');
-        } catch (error: any) {
-            // 显示错误状态
-            this.statusBarItem.text = `$(error) Upload failed`;
-            setTimeout(() => this.statusBarItem.hide(), 3000);
-            this.log(`[${this.currentServer?.name}] Failed to upload file : ${error.message}`, 'error');
+            this.log(`[${this.currentServer?.name}] 文件上传成功: ${fileInfo.remotePath}`, 'info');
+            this.statusBar.showMessage(`文件已上传到 [${serverDisplay}]`, 'info');
+        } finally {
+            this.setOperationStatus(false);
         }
     }
 
@@ -463,18 +484,45 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             const tempManager = new SftpManager();
             await tempManager.connect(serverConfig);
 
-            // 构建远程路径 - 使用文件名
-            const fileName = path.basename(document.uri.fsPath);
-            const remotePath = path.join(serverConfig.remotePath, fileName).replace(/\\/g, '/');
+            let relativePath;
+            const fileInfo = this.remoteFiles.get(document.uri.toString());
+            
+            if (fileInfo) {
+                // 如果是远程文件，使用原始远程路径
+                relativePath = fileInfo.remotePath;
+            } else {
+                // 获取工作区相对路径
+                const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+                if (!workspaceFolder) {
+                    throw new Error('No workspace folder found');
+                }
+                
+                relativePath = path.join(
+                    serverConfig.remotePath,
+                    path.relative(workspaceFolder.uri.fsPath, document.uri.fsPath)
+                ).replace(/\\/g, '/');
+            }
+
+            // 确保远程目录存在
+            const remoteDir = path.dirname(relativePath);
+            try {
+                await tempManager.mkdir(remoteDir, true);
+            } catch (err: any) {
+                this.log(`[${serverConfig.name}] Failed to create directory: ${err.message}`, 'warning');
+            }
 
             // 上传文件
-            await tempManager.writeFile(remotePath, document.getText());
+            await tempManager.writeFile(relativePath, document.getText());
             
-            this.log(`[${serverConfig.name}] File uploaded successfully`, 'info');
+            this.log(`[${serverConfig.name}] File uploaded successfully to ${relativePath}`, 'info');
             this.statusBar.showMessage(`文件已上传到 [${serverConfig.name}]`, 'info');
 
             // 断开连接
             tempManager.disconnect();
+            
+            // 刷新文件浏览器
+            this.refresh();
+
         } catch (error: any) {
             this.log(`[${serverConfig.name}] Failed to upload file: ${error.message}`, 'error');
             this.statusBar.showMessage(`上传失败: ${error.message}`, 'error');
@@ -529,10 +577,12 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
 
     async downloadRemoteFile(item: ExplorerItem) {
         try {
+            this.setOperationStatus(true);
             if (!this.currentServer) {
                 throw new Error('No server connected');
             }
 
+            this.log(`[${this.currentServer.name}] 开始下载文件: ${item.path}`, 'info');
             this.statusBar.showProgress(`正在下载文件...`);
 
             // 获取文件内容
@@ -578,11 +628,12 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             // 写入文件
             await vscode.workspace.fs.writeFile(vscode.Uri.file(localPath), Buffer.from(content));
             
-            this.log(`[${this.currentServer.name}] File downloaded successfully to ${localPath}`, 'info');
+            this.log(`[${this.currentServer.name}] 文件下载成功:
+远程路径: ${item.path}
+本地路径: ${localPath}`, 'info');
             this.statusBar.showMessage(`文件已下载到: ${localPath}`, 'info');
-        } catch (error: any) {
-            this.log(`[${this.currentServer?.name}] Failed to download file: ${error.message}`, 'error');
-            this.statusBar.showMessage(`下载失败: ${error.message}`, 'error');
+        } finally {
+            this.setOperationStatus(false);
         }
     }
     
@@ -592,20 +643,46 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
                 throw new Error('No server connected');
             }
 
-            // 确认删除
-            const answer = await vscode.window.showWarningMessage(
-                `确定要删除文件 "${item.label}" 吗？`,
-                '确定',
-                '取消'
-            );
+            const typeText = item.isDirectory ? '目录' : '文件';
+            // 先检查文件/目录是否存在
+            try {
+                await this.sftpManager.stat(item.path);
+            } catch (err) {
+                throw new Error(`${typeText}不存在或无法访问`);
+            }
 
-            if (answer === '确定') {
-                this.statusBar.showProgress(`正在删除文件...`);
+            this.log(`[${this.currentServer.name}] 准备删除${typeText}: ${item.path}`, 'info');
+
+            // 获取配置
+            const config = vscode.workspace.getConfiguration('sftp-tools');
+            const showConfirm = config.get<boolean>('showConfirmDialog');
+
+            let shouldDelete = true;
+            if (showConfirm) {
+                // 确认删除
+                const answer = await vscode.window.showWarningMessage(
+                    `确定要删除${typeText} "${item.label}" 吗？`,
+                    '确定',
+                    '取消'
+                );
+                shouldDelete = answer === '确定';
+            }
+
+            if (shouldDelete) {
+                this.statusBar.showProgress(`正在删除${typeText}...`);
                 
-                // 删除文件
-                await this.sftpManager.deleteFile(item.path);
-                this.log(`[${this.currentServer.name}] File deleted successfully: ${item.path}`, 'info');
-                this.statusBar.showMessage(`文件已删除`, 'info');
+                if (item.isDirectory) {
+                    // 递归删除目录
+                    this.log(`[${this.currentServer.name}] 开始递归删除目录: ${item.path}`, 'info');
+                    await this.sftpManager.rmdir(item.path, true);
+                } else {
+                    // 删除文件
+                    this.log(`[${this.currentServer.name}] 开始删除文件: ${item.path}`, 'info');
+                    await this.sftpManager.deleteFile(item.path);
+                }
+                
+                this.log(`[${this.currentServer.name}] ${typeText}删除成功: ${item.path}`, 'info');
+                this.statusBar.showMessage(`${typeText}已删除`, 'info');
                 this.refresh(); // 刷新文件列表
             }
         } catch (error: any) {
@@ -617,6 +694,13 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     // 获取当前活动的服务器
     public getCurrentServer(): ServerConfig | undefined {
         return this.currentServer;
+    }
+
+    disconnectAllServers() {
+        this.sftpManager.disconnect();
+        this.currentServer = undefined;
+        this.remoteFiles.clear();
+        this.refresh();
     }
 }
 
@@ -630,13 +714,13 @@ export class ExplorerItem extends vscode.TreeItem {
         super(label, collapsibleState);
         this.tooltip = this.path;
         
+        this.contextValue = isDirectory ? 'directory' : 'file';
         if (!isDirectory) {
             this.command = {
                 command: 'sftp-tools.openFile',
                 title: 'Open File',
-                arguments: [this]  // 移除第二个参数
+                arguments: [this]
             };
-            this.contextValue = 'file';
         }
     }
 } 

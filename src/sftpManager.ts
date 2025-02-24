@@ -3,6 +3,20 @@ import * as ssh2 from 'ssh2';
 export class SftpManager {
     private client: ssh2.Client | null = null;
     private sftp: ssh2.SFTPWrapper | null = null;
+    private isCancelled: boolean = false;
+
+    cancelOperations() {
+        this.isCancelled = true;
+        if (this.client) {
+            this.disconnect();
+        }
+    }
+
+    private checkCancelled() {
+        if (this.isCancelled) {
+            throw new Error('Operation cancelled');
+        }
+    }
 
     async connect(serverConfig: any): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -51,6 +65,8 @@ export class SftpManager {
                 return;
             }
 
+            this.checkCancelled();
+
             this.sftp.readFile(path, 'utf8', (err: any, data: any) => {
                 if (err) {
                     reject(err);
@@ -68,24 +84,15 @@ export class SftpManager {
                 return;
             }
 
-            // 先备份原文件
-            this.sftp.rename(path, `${path}.bak`, (renameErr) => {
-                // 即使备份失败也继续写入新文件
-                this.sftp!.writeFile(path, content, (err: any) => {
-                    if (err) {
-                        // 如果写入失败且有备份，尝试恢复
-                        if (!renameErr) {
-                            this.sftp!.rename(`${path}.bak`, path, () => {});
-                        }
-                        reject(err);
-                        return;
-                    }
-                    // 写入成功后删除备份
-                    if (!renameErr) {
-                        this.sftp!.unlink(`${path}.bak`, () => {});
-                    }
-                    resolve();
-                });
+            this.checkCancelled();
+
+            // 直接写入/覆盖文件
+            this.sftp.writeFile(path, content, (err: any) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve();
             });
         });
     }
@@ -105,11 +112,122 @@ export class SftpManager {
             });
         });
     }
+    async mkdir(path: string, recursive: boolean = false): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+
+            if (recursive) {
+                // 递归创建目录
+                const parts = path.split('/').filter(p => p);
+                let current = '';
+                const promises = parts.map(part => {
+                    current += '/' + part;
+                    return new Promise(resolve => {
+                        this.sftp!.mkdir(current, err => {
+                            // 忽略目录已存在的错误
+                            resolve(null);
+                        });
+                    });
+                });
+                
+                Promise.all(promises)
+                    .then(() => resolve())
+                    .catch(reject);
+            } else {
+                this.sftp.mkdir(path, err => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve();
+                });
+            }
+        });
+    }
+    async rmdir(path: string, recursive: boolean = false): Promise<void> {
+        return new Promise(async (resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+
+            if (recursive) {
+                try {
+                    // 先检查目录是否存在
+                    await new Promise((res, rej) => {
+                        this.sftp!.stat(path, (err) => {
+                            if (err) {
+                                rej(new Error(`Directory not found: ${path}`));
+                                return;
+                            }
+                            res(null);
+                        });
+                    });
+
+                    const files = await this.listFiles(path);
+                    
+                    for (const file of files) {
+                        if (file.filename === '.' || file.filename === '..') {
+                            continue;
+                        }
+                        
+                        const fullPath = `${path}/${file.filename}`;
+                        if ((file.attrs as any).isDirectory) {
+                            await this.rmdir(fullPath, true);
+                        } else {
+                            await this.deleteFile(fullPath);
+                        }
+                    }
+                    
+                    // 最后删除目录本身
+                    await new Promise<void>((res, rej) => {
+                        this.sftp!.rmdir(path, (err) => {
+                            if (err) {
+                                rej(new Error(`Failed to remove directory: ${path}, ${err.message}`));
+                                return;
+                            }
+                            res();
+                        });
+                    });
+                    resolve();
+                } catch (err) {
+                    reject(err);
+                }
+            } else {
+                this.sftp.rmdir(path, (err) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve();
+                });
+            }
+        });
+    }
     disconnect() {
         if (this.client) {
             this.client.end();
             this.client = null;
             this.sftp = null;
         }
+    }
+    async stat(path: string): Promise<any> {
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+
+            this.sftp.stat(path, (err, stats) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(stats);
+            });
+        });
     }
 } 

@@ -20,6 +20,13 @@ export function activate(context: vscode.ExtensionContext) {
 	// 创建设置编辑器提供程序
 	const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri);
 
+	// 先注册设置编辑器命令
+	context.subscriptions.push(
+		vscode.commands.registerCommand('sftp-tools.openSettingsEditor', () => {
+			settingsEditorProvider.showSettingsEditor();
+		})
+	);
+
 	// 注册服务器视图
 	const sftpServersProvider = new SftpServersProvider();
 	const sftpExplorerProvider = new SftpExplorerProvider(sftpServersProvider);
@@ -105,9 +112,6 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('sftp-tools.openFileNonPreview', (item) => {
 			sftpExplorerProvider.openFile(item, true);
 		}),
-		vscode.commands.registerCommand('sftp-tools.openSettingsEditor', () => {
-			settingsEditorProvider.showSettingsEditor();
-		}),
 		vscode.commands.registerCommand('sftp-tools.connectServer', (serverItem: ServerItem) => {
 			if (serverItem.serverConfig) {
 				sftpExplorerProvider.connectToServer(serverItem.serverConfig);
@@ -172,6 +176,12 @@ export function activate(context: vscode.ExtensionContext) {
 			if (item) {
 				sftpExplorerProvider.deleteRemoteFile(item);
 			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.cancelOperations', () => {
+			sftpExplorerProvider.cancelOperations();
+		}),
+		vscode.commands.registerCommand('sftp-tools.disconnectAllServers', () => {
+			sftpExplorerProvider.disconnectAllServers();
 		})
 	);
 

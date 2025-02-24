@@ -227,22 +227,116 @@ export class SettingsEditorProvider {
                         color: var(--vscode-textLink-foreground);
                         font-weight: 500;
                     }
+                    .settings-section {
+                        border: 1px solid var(--vscode-input-border);
+                        border-radius: 4px;
+                        padding: 16px;
+                        margin-bottom: 20px;
+                    }
+                    .settings-section label {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    .container {
+                        max-width: 800px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }
+                    
+                    h1 {
+                        color: var(--vscode-foreground);
+                        font-size: 24px;
+                        margin-bottom: 24px;
+                        border-bottom: 1px solid var(--vscode-input-border);
+                        padding-bottom: 12px;
+                    }
+                    
+                    .settings-section {
+                        border: 1px solid var(--vscode-input-border);
+                        border-radius: 4px;
+                        padding: 16px;
+                        margin-bottom: 20px;
+                        background-color: var(--vscode-editor-background);
+                    }
+                    
+                    .settings-section h3 {
+                        color: var(--vscode-foreground);
+                        font-size: 16px;
+                        margin: 0 0 16px 0;
+                        padding-bottom: 8px;
+                        border-bottom: 1px solid var(--vscode-input-border);
+                    }
+                    
+                    .settings-section label {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        color: var(--vscode-foreground);
+                        font-size: 14px;
+                        cursor: pointer;
+                        padding: 4px 0;
+                    }
+                    
+                    .settings-section input[type="checkbox"] {
+                        width: 16px;
+                        height: 16px;
+                        cursor: pointer;
+                    }
+                    
+                    .server-list {
+                        margin-top: 24px;
+                    }
+                    
+                    .server-list h3 {
+                        color: var(--vscode-foreground);
+                        font-size: 16px;
+                        margin: 0 0 16px 0;
+                    }
+                    
+                    .empty-state {
+                        text-align: center;
+                        padding: 32px;
+                        background-color: var(--vscode-editor-background);
+                        border-radius: 4px;
+                        margin: 16px 0;
+                    }
+                    
+                    button {
+                        background-color: var(--vscode-button-background);
+                        color: var(--vscode-button-foreground);
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        transition: background-color 0.2s;
+                    }
+                    
+                    button:hover {
+                        background-color: var(--vscode-button-hoverBackground);
+                    }
                 </style>
             </head>
             <body>
-                <div id="content">
-                    <div id="serverList" class="server-list"></div>
-                    <div id="emptyState" class="empty-state">
-                        <div class="empty-state-text">还没有配置任何服务器</div>
-                        <div class="empty-state-tip">
-                            点击右上角 <span class="highlight">添加服务器</span> 按钮开始配置
-                        </div>
-                        <div class="empty-state-tip">
-                            配置完成后点击 <span class="highlight">保存全部</span> 按钮保存更改
+                <div class="container">
+                    <h1>SFTP 设置</h1>
+                    <div class="settings-section">
+                        <h3>通用设置</h3>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="showConfirmDialog" ${vscode.workspace.getConfiguration('sftp-tools').get('showConfirmDialog', true) ? 'checked' : ''}>
+                                删除文件时显示确认对话框
+                            </label>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <button id="addServerBtn">添加服务器</button>
+                    <div class="server-section">
+                        <h3>服务器管理</h3>
+                        <div id="serverList" class="server-list"></div>
+                        <div id="emptyState" class="empty-state">
+                            <p>还没有配置任何服务器</p>
+                            <button id="addServerBtn">添加服务器</button>
+                        </div>
                     </div>
                 </div>
                 <div class="global-actions" id="globalActions">
@@ -254,6 +348,13 @@ export class SettingsEditorProvider {
 
                     document.getElementById('addServerBtn').addEventListener('click', addServer);
                     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+                    document.getElementById('showConfirmDialog').addEventListener('change', (e) => {
+                        vscode.postMessage({
+                            type: 'updateSetting',
+                            setting: 'showConfirmDialog',
+                            value: e.target.checked
+                        });
+                    });
 
                     window.addEventListener('message', event => {
                         const message = event.data;
@@ -397,6 +498,29 @@ export class SettingsEditorProvider {
                 </script>
             </body>
             </html>`;
+    }
+
+    private async handleMessage(message: any) {
+        switch (message.type) {
+            case 'updateSetting':
+                await vscode.workspace.getConfiguration('sftp-tools').update(
+                    message.setting,
+                    message.value,
+                    vscode.ConfigurationTarget.Global
+                );
+                vscode.commands.executeCommand('sftp-tools.refreshServers');
+                break;
+            case 'saveSettings':
+                try {
+                    await this._saveSettings(message.servers);
+                    vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
+                    vscode.commands.executeCommand('sftp-tools.refreshServers');
+                    vscode.window.showInformationMessage('设置已保存');
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(`保存失败: ${error.message}`);
+                }
+                break;
+        }
     }
 }
 
