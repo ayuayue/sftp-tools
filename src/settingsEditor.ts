@@ -9,12 +9,6 @@ export class SettingsEditorProvider {
     constructor(
         private readonly _extensionUri: vscode.Uri,
     ) {
-        this._registerCommands();
-    }
-
-    private _registerCommands() {
-        // vscode.commands.registerCommand('sftp-tools.deleteRemoteFile', this.deleteRemoteFile.bind(this));
-        // vscode.commands.registerCommand('sftp-tools.downloadRemoteFile', this.downloadRemoteFile.bind(this));
     }
 
     private async deleteRemoteFile(fileUri: vscode.Uri) {

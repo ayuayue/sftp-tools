@@ -17,6 +17,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	log('SFTP Tools extension is activating...');
 
+	// 创建设置编辑器提供程序
+	const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri);
+
 	// 注册服务器视图
 	const sftpServersProvider = new SftpServersProvider();
 	const sftpExplorerProvider = new SftpExplorerProvider(sftpServersProvider);
@@ -24,9 +27,6 @@ export function activate(context: vscode.ExtensionContext) {
 	// 注册视图
 	vscode.window.registerTreeDataProvider('sftp-tools-servers', sftpServersProvider);
 	vscode.window.registerTreeDataProvider('sftp-tools-explorer', sftpExplorerProvider);
-
-	// 创建设置编辑器提供程序
-	const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri);
 
 	// 移除 showMessage 函数和调用
 	log('SFTP Tools extension is ready!');
