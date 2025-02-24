@@ -12,9 +12,8 @@
 - 🔄 自动同步更改
 - 🎯 简单直观的界面
 
-![alt text](./media/images/录屏_20250224_151538.gif)
-
-![alt text](./media/images/录屏_20250224_151819.gif)
+![alt text](./media/images/setting.gif)
+![alt text](./media/images/file_op.gif)
 
 ## 使用方法
 

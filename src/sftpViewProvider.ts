@@ -11,7 +11,9 @@ interface ServerConfig {
     host: string;
     port: number;
     username: string;
-    password: string;
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
     remotePath: string;
 }
 
@@ -87,11 +89,54 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
         const username = await vscode.window.showInputBox({ prompt: '输入用户名' });
         if (!username) { return; }
 
-        const password = await vscode.window.showInputBox({ 
-            prompt: '输入密码',
-            password: true
-        });
-        if (!password) { return; }
+        // 选择认证方式
+        const authType = await vscode.window.showQuickPick(
+            [
+                { label: '密码认证', value: 'password' },
+                { label: '密钥文件', value: 'privateKey' }
+            ],
+            { placeHolder: '选择认证方式' }
+        );
+        if (!authType) { return; }
+
+        let password: string | undefined;
+        let privateKeyPath: string | undefined;
+        let passphrase: string | undefined;
+
+        if (authType.value === 'password') {
+            password = await vscode.window.showInputBox({ 
+                prompt: '输入密码',
+                password: true
+            });
+            if (!password) { return; }
+        } else {
+            const result = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                title: '选择私钥文件',
+                filters: {
+                    'All files': ['*']
+                }
+            });
+            if (!result || result.length === 0) { return; }
+            privateKeyPath = result[0].fsPath;
+
+            // 询问是否需要密码短语
+            const needPassphrase = await vscode.window.showQuickPick(
+                ['是', '否'],
+                { placeHolder: '私钥文件是否需要密码短语？' }
+            );
+            if (!needPassphrase) { return; }
+
+            if (needPassphrase === '是') {
+                passphrase = await vscode.window.showInputBox({
+                    prompt: '输入私钥密码短语',
+                    password: true
+                });
+                if (!passphrase) { return; }
+            }
+        }
 
         const remotePath = await vscode.window.showInputBox({ 
             prompt: '输入远程路径',
@@ -104,7 +149,9 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
             host,
             port: parseInt(port),
             username,
-            password,
+            ...(password ? { password } : {}),
+            ...(privateKeyPath ? { privateKeyPath } : {}),
+            ...(passphrase ? { passphrase } : {}),
             remotePath
         });
 
@@ -640,53 +687,38 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     async deleteRemoteFile(item: ExplorerItem) {
         try {
             if (!this.currentServer) {
-                throw new Error('No server connected');
+                throw new Error('没有连接到服务器');
             }
 
             const typeText = item.isDirectory ? '目录' : '文件';
-            // 先检查文件/目录是否存在
-            try {
-                await this.sftpManager.stat(item.path);
-            } catch (err) {
-                throw new Error(`${typeText}不存在或无法访问`);
-            }
 
-            this.log(`[${this.currentServer.name}] 准备删除${typeText}: ${item.path}`, 'info');
+            // 确认删除
+            const answer = await vscode.window.showWarningMessage(
+                `确定要删除${typeText} "${item.label}" 吗？\n路径: ${item.path}`,
+                '确定',
+                '取消'
+            );
 
-            // 获取配置
-            const config = vscode.workspace.getConfiguration('sftp-tools');
-            const showConfirm = config.get<boolean>('showConfirmDialog');
-
-            let shouldDelete = true;
-            if (showConfirm) {
-                // 确认删除
-                const answer = await vscode.window.showWarningMessage(
-                    `确定要删除${typeText} "${item.label}" 吗？`,
-                    '确定',
-                    '取消'
-                );
-                shouldDelete = answer === '确定';
-            }
-
-            if (shouldDelete) {
+            if (answer === '确定') {
                 this.statusBar.showProgress(`正在删除${typeText}...`);
+                this.log(`[${this.currentServer.name}] 开始删除${typeText}: ${item.path}`, 'info');
                 
-                if (item.isDirectory) {
-                    // 递归删除目录
-                    this.log(`[${this.currentServer.name}] 开始递归删除目录: ${item.path}`, 'info');
-                    await this.sftpManager.rmdir(item.path, true);
-                } else {
-                    // 删除文件
-                    this.log(`[${this.currentServer.name}] 开始删除文件: ${item.path}`, 'info');
-                    await this.sftpManager.deleteFile(item.path);
+                try {
+                    if (item.isDirectory) {
+                        await this.sftpManager.rmdir(item.path, true);
+                    } else {
+                        await this.sftpManager.deleteFile(item.path);
+                    }
+                    
+                    this.log(`[${this.currentServer.name}] ${typeText}删除成功: ${item.path}`, 'info');
+                    this.statusBar.showMessage(`${typeText}已删除`, 'info');
+                    this.refresh(); // 刷新文件列表
+                } catch (error: any) {
+                    throw new Error(`删除${typeText}失败: ${error.message}`);
                 }
-                
-                this.log(`[${this.currentServer.name}] ${typeText}删除成功: ${item.path}`, 'info');
-                this.statusBar.showMessage(`${typeText}已删除`, 'info');
-                this.refresh(); // 刷新文件列表
             }
         } catch (error: any) {
-            this.log(`[${this.currentServer?.name}] Failed to delete file: ${error.message}`, 'error');
+            this.log(`[${this.currentServer?.name}] 删除失败: ${error.message}`, 'error');
             this.statusBar.showMessage(`删除失败: ${error.message}`, 'error');
         }
     }

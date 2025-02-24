@@ -32,12 +32,35 @@ export class SftpManager {
                 });
             }).on('error', (err: any) => {
                 reject(err);
-            }).connect({
+            });
+
+            const connectConfig: any = {
                 host: serverConfig.host,
                 port: serverConfig.port,
-                username: serverConfig.username,
-                password: serverConfig.password
-            });
+                username: serverConfig.username
+            };
+
+            // 如果提供了私钥文件路径，使用私钥认证
+            if (serverConfig.privateKeyPath) {
+                try {
+                    const fs = require('fs');
+                    connectConfig.privateKey = fs.readFileSync(serverConfig.privateKeyPath);
+                    if (serverConfig.passphrase) {
+                        connectConfig.passphrase = serverConfig.passphrase;
+                    }
+                } catch (error: any) {
+                    reject(new Error(`读取私钥文件失败: ${error.message}`));
+                    return;
+                }
+            } else if (serverConfig.password) {
+                // 否则使用密码认证
+                connectConfig.password = serverConfig.password;
+            } else {
+                reject(new Error('未提供认证信息'));
+                return;
+            }
+
+            this.client.connect(connectConfig);
         });
     }
 
@@ -154,56 +177,47 @@ export class SftpManager {
                 return;
             }
 
-            if (recursive) {
-                try {
-                    // 先检查目录是否存在
-                    await new Promise((res, rej) => {
-                        this.sftp!.stat(path, (err) => {
-                            if (err) {
-                                rej(new Error(`Directory not found: ${path}`));
-                                return;
-                            }
-                            res(null);
-                        });
-                    });
+            try {
+                // 先检查路径是否存在
+                const stats = await this.stat(path);
+                if (!stats.isDirectory()) {
+                    reject(new Error('Path is not a directory'));
+                    return;
+                }
 
+                if (recursive) {
+                    // 列出目录内容
                     const files = await this.listFiles(path);
                     
+                    // 递归删除所有内容
                     for (const file of files) {
+                        const fullPath = `${path}/${file.filename}`;
+                        
+                        // 跳过 . 和 ..
                         if (file.filename === '.' || file.filename === '..') {
                             continue;
                         }
-                        
-                        const fullPath = `${path}/${file.filename}`;
-                        if ((file.attrs as any).isDirectory) {
+
+                        if (file.longname.startsWith('d')) {
+                            // 是目录，递归删除
                             await this.rmdir(fullPath, true);
                         } else {
+                            // 是文件，直接删除
                             await this.deleteFile(fullPath);
                         }
                     }
-                    
-                    // 最后删除目录本身
-                    await new Promise<void>((res, rej) => {
-                        this.sftp!.rmdir(path, (err) => {
-                            if (err) {
-                                rej(new Error(`Failed to remove directory: ${path}, ${err.message}`));
-                                return;
-                            }
-                            res();
-                        });
-                    });
-                    resolve();
-                } catch (err) {
-                    reject(err);
                 }
-            } else {
+
+                // 删除目录本身
                 this.sftp.rmdir(path, (err) => {
                     if (err) {
-                        reject(err);
+                        reject(new Error(`Failed to remove directory: ${err.message}`));
                         return;
                     }
                     resolve();
                 });
+            } catch (err: any) {
+                reject(new Error(`Failed to delete directory: ${err.message}`));
             }
         });
     }

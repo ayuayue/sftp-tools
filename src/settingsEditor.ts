@@ -2,6 +2,12 @@ import * as vscode from 'vscode';
 import { ServerItem } from './sftpViewProvider';
 import path from 'path';
 
+declare global {
+    interface Window {
+        acquireVsCodeApi(): any;
+    }
+}
+
 export class SettingsEditorProvider {
     public static readonly viewType = 'sftp-tools.settingsEditor';
     private _view?: vscode.WebviewPanel;
@@ -82,24 +88,47 @@ export class SettingsEditorProvider {
             try {
                 switch (message.command) {
                     case 'saveSettings':
-                        await this._saveSettings(message.servers);
-                        vscode.window.showInformationMessage('Settings saved successfully!');
-                        break;
-                    case 'confirmDelete':
-                        const confirmDeleteAnswer = await vscode.window.showWarningMessage(
-                            'Are you sure you want to delete this server?',
-                            'Yes',
-                            'No'
-                        );
-                        if (confirmDeleteAnswer === 'Yes') {
-                            this._view?.webview.postMessage({
-                                command: 'deleteConfirmed',
-                                index: message.index
-                            });
+                        try {
+                            // 验证密钥文件配置
+                            const servers = message.servers;
+                            for (let i = 0; i < servers.length; i++) {
+                                const server = servers[i];
+                                if (!server.password && !server.privateKeyPath) {
+                                    throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
+                                }
+                            }
+                            await this._saveSettings(message.servers);
+                            vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
+                            vscode.commands.executeCommand('sftp-tools.refreshServers');
+                            vscode.window.showInformationMessage('设置已保存');
+                        } catch (error: any) {
+                            vscode.window.showErrorMessage(`保存失败: ${error.message}`);
                         }
                         break;
-                    case 'setPaths':
-                        await this._setPaths(message.localPath, message.remotePath, message.serverId);
+                    case 'selectKeyFile':
+                        try {
+                            const result = await vscode.window.showOpenDialog({
+                                canSelectFiles: true,
+                                canSelectFolders: false,
+                                canSelectMany: false,
+                                title: '选择私钥文件',
+                                filters: {
+                                    'All files': ['*']
+                                }
+                            });
+                            
+                            if (result && result.length > 0) {
+                                const path = result[0].fsPath;
+                                // 发送选择的文件路径回 webview
+                                this._view?.webview.postMessage({
+                                    command: 'keyFileSelected',
+                                    index: message.index,
+                                    path: path
+                                });
+                            }
+                        } catch (error: any) {
+                            vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
+                        }
                         break;
                     default:
                         const errorAnswer = await vscode.window.showWarningMessage(
@@ -120,7 +149,7 @@ export class SettingsEditorProvider {
         await config.update('servers', servers, vscode.ConfigurationTarget.Global);
     }
 
-    private async _setPaths(localPath: string, remotePath: string, serverId?: string) {
+    public async _setPaths(localPath: string, remotePath: string, serverId?: string) {
         const config = vscode.workspace.getConfiguration('sftp-tools');
         const servers = config.get('servers') as Array<{
             id: string;
@@ -143,9 +172,13 @@ export class SettingsEditorProvider {
         vscode.window.showInformationMessage('Paths set successfully!');
     }
 
-    private _getHtmlForWebview(): string {
+    public _getHtmlForWebview(): string {
         const nonce = getNonce();
-        return `<!DOCTYPE html>
+        const config = vscode.workspace.getConfiguration('sftp-tools');
+        const servers = config.get('servers') || [];
+        const serversJson = JSON.stringify(servers);
+        
+        const htmlContent = /* html */`<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
@@ -227,115 +260,59 @@ export class SettingsEditorProvider {
                         color: var(--vscode-textLink-foreground);
                         font-weight: 500;
                     }
-                    .settings-section {
-                        border: 1px solid var(--vscode-input-border);
-                        border-radius: 4px;
-                        padding: 16px;
-                        margin-bottom: 20px;
-                    }
-                    .settings-section label {
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                    }
-                    .container {
-                        max-width: 800px;
-                        margin: 0 auto;
-                        padding: 20px;
-                    }
-                    
-                    h1 {
-                        color: var(--vscode-foreground);
-                        font-size: 24px;
-                        margin-bottom: 24px;
-                        border-bottom: 1px solid var(--vscode-input-border);
-                        padding-bottom: 12px;
-                    }
-                    
-                    .settings-section {
-                        border: 1px solid var(--vscode-input-border);
-                        border-radius: 4px;
-                        padding: 16px;
-                        margin-bottom: 20px;
-                        background-color: var(--vscode-editor-background);
-                    }
-                    
-                    .settings-section h3 {
-                        color: var(--vscode-foreground);
-                        font-size: 16px;
-                        margin: 0 0 16px 0;
-                        padding-bottom: 8px;
-                        border-bottom: 1px solid var(--vscode-input-border);
-                    }
-                    
-                    .settings-section label {
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        color: var(--vscode-foreground);
-                        font-size: 14px;
-                        cursor: pointer;
-                        padding: 4px 0;
-                    }
-                    
-                    .settings-section input[type="checkbox"] {
-                        width: 16px;
-                        height: 16px;
-                        cursor: pointer;
-                    }
-                    
-                    .server-list {
-                        margin-top: 24px;
-                    }
-                    
-                    .server-list h3 {
-                        color: var(--vscode-foreground);
-                        font-size: 16px;
-                        margin: 0 0 16px 0;
-                    }
-                    
-                    .empty-state {
-                        text-align: center;
-                        padding: 32px;
-                        background-color: var(--vscode-editor-background);
-                        border-radius: 4px;
-                        margin: 16px 0;
-                    }
-                    
-                    button {
-                        background-color: var(--vscode-button-background);
+
+                    /* 添加服务器按钮样式 */
+                    .add-server-btn {
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        padding: 8px 16px;
+                        background: var(--vscode-button-background);
                         color: var(--vscode-button-foreground);
                         border: none;
-                        padding: 8px 16px;
                         border-radius: 4px;
                         cursor: pointer;
-                        font-size: 14px;
-                        transition: background-color 0.2s;
+                        display: flex;
+                        align-items: center;
+                        gap: 5px;
                     }
-                    
-                    button:hover {
-                        background-color: var(--vscode-button-hoverBackground);
+                    .add-server-btn:hover {
+                        background: var(--vscode-button-hoverBackground);
+                    }
+                    .key-input-group {
+                        display: flex;
+                        gap: 8px;
+                    }
+                    .select-key-btn {
+                        white-space: nowrap;
+                        padding: 4px 8px;
+                    }
+                    .auth-type {
+                        width: 100%;
+                        padding: 5px;
+                        background: var(--vscode-input-background);
+                        color: var(--vscode-input-foreground);
+                        border: 1px solid var(--vscode-input-border);
+                    }
+                    .key-group, .password-group {
+                        margin-top: 8px;
                     }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <h1>SFTP 设置</h1>
-                    <div class="settings-section">
-                        <h3>通用设置</h3>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="showConfirmDialog" ${vscode.workspace.getConfiguration('sftp-tools').get('showConfirmDialog', true) ? 'checked' : ''}>
-                                删除文件时显示确认对话框
-                            </label>
+                <div id="content">
+                    <button id="addServerBtn" class="add-server-btn">
+                        <span class="codicon codicon-add"></span>
+                        添加服务器
+                    </button>
+                    <div id="serverList" class="server-list"></div>
+                    <div id="emptyState" class="empty-state">
+                        <div class="empty-state-text">还没有配置任何服务器</div>
+                        <div class="empty-state-tip">
+                            点击右上角 <span class="highlight">添加服务器</span> 按钮开始配置
                         </div>
-                    </div>
-                    <div class="server-section">
-                        <h3>服务器管理</h3>
-                        <div id="serverList" class="server-list"></div>
-                        <div id="emptyState" class="empty-state">
-                            <p>还没有配置任何服务器</p>
-                            <button id="addServerBtn">添加服务器</button>
+                        <div class="empty-state-tip">
+                            配置完成后点击 <span class="highlight">保存全部</span> 按钮保存更改
                         </div>
                     </div>
                 </div>
@@ -344,108 +321,92 @@ export class SettingsEditorProvider {
                 </div>
                 <script nonce="${nonce}">
                     const vscode = acquireVsCodeApi();
-                    let servers = [];
+                    let servers = ${serversJson};
 
-                    document.getElementById('addServerBtn').addEventListener('click', addServer);
-                    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-                    document.getElementById('showConfirmDialog').addEventListener('change', (e) => {
-                        vscode.postMessage({
-                            type: 'updateSetting',
-                            setting: 'showConfirmDialog',
-                            value: e.target.checked
-                        });
-                    });
-
+                    // 添加消息处理
                     window.addEventListener('message', event => {
                         const message = event.data;
                         switch (message.command) {
                             case 'loadSettings':
-                                servers = message.servers || [];
+                                servers = message.servers;
                                 renderServers();
                                 break;
-                            case 'editServer':
-                                const serverItem = document.querySelector('[data-server-name="'+message.serverName+'"]');
-                                if (serverItem) {
-                                    serverItem.scrollIntoView({ behavior: 'smooth' });
-                                    serverItem.classList.add('highlight');
-                                    setTimeout(() => serverItem.classList.remove('highlight'), 2000);
-                                }
-                                break;
-                            case 'deleteConfirmed':
-                                servers.splice(message.index, 1);
+                            case 'keyFileSelected':
+                                // 更新服务器配置
+                                updateServer(message.index, 'privateKeyPath', message.path);
                                 renderServers();
                                 break;
                         }
                     });
 
+                    document.getElementById('addServerBtn').addEventListener('click', addServer);
+                    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+
+                    // 初始化显示
+                    renderServers();
+                    updateEmptyState();
+
+                    function getServerHtml(server, index) {
+                        return \`
+                            <div class="server-item">
+                                <div class="form-group">
+                                    <label>服务器名称:</label>
+                                    <input type="text" value="\${server.name || ''}" data-index="\${index}" data-field="name" placeholder="输入服务器名称">
+                                </div>
+                                <div class="form-group">
+                                    <label>主机地址:</label>
+                                    <input type="text" value="\${server.host || ''}" data-index="\${index}" data-field="host" placeholder="输入主机地址">
+                                </div>
+                                <div class="form-group">
+                                    <label>端口:</label>
+                                    <input type="number" value="\${server.port || 22}" data-index="\${index}" data-field="port" placeholder="22">
+                                </div>
+                                <div class="form-group">
+                                    <label>用户名:</label>
+                                    <input type="text" value="\${server.username || ''}" data-index="\${index}" data-field="username" placeholder="输入用户名">
+                                </div>
+                                <div class="form-group">
+                                    <label>认证方式:</label>
+                                    <select class="auth-type" data-index="\${index}">
+                                        <option value="password" \${!server.privateKeyPath ? 'selected' : ''}>密码认证</option>
+                                        <option value="privateKey" \${server.privateKeyPath ? 'selected' : ''}>密钥文件</option>
+                                    </select>
+                                </div>
+                                <div class="form-group password-group" \${server.privateKeyPath ? 'style="display:none;"' : ''}>
+                                    <label>密码:</label>
+                                    <input type="password" value="\${server.password || ''}" data-index="\${index}" data-field="password" placeholder="输入密码">
+                                </div>
+                                <div class="form-group key-group" \${!server.privateKeyPath ? 'style="display:none;"' : ''}>
+                                    <label>私钥文件路径:</label>
+                                    <div class="key-input-group">
+                                        <input type="text" value="\${server.privateKeyPath || ''}" data-index="\${index}" data-field="privateKeyPath" placeholder="选择私钥文件" readonly>
+                                        <button class="select-key-btn" data-index="\${index}">选择文件</button>
+                                    </div>
+                                    <div class="form-group passphrase-group">
+                                        <label>密码短语:</label>
+                                        <input type="password" value="\${server.passphrase || ''}" data-index="\${index}" data-field="passphrase" placeholder="如果私钥需要密码短语，请输入">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>本地工作区目录:</label>
+                                    <input type="text" value="\${server.localPath || ''}" data-index="\${index}" data-field="localPath" placeholder="输入本地工作区目录">
+                                </div>
+                                <div class="form-group">
+                                    <label>远程目录:</label>
+                                    <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="输入远程目录">
+                                </div>
+                                <div class="actions">
+                                    <button class="deleteBtn" data-index="\${index}">删除</button>
+                                </div>
+                            </div>
+                        \`;
+                    }
+
                     function renderServers() {
                         const serverList = document.getElementById('serverList');
-                        const emptyState = document.getElementById('emptyState');
-                        
-                        if (servers.length === 0) {
-                            serverList.style.display = 'none';
-                            emptyState.style.display = 'block';
-                        } else {
-                            serverList.style.display = 'block';
-                            emptyState.style.display = 'none';
-                            
-                            serverList.innerHTML = servers.map((server, index) => {
-                                const serverDiv = document.createElement('div');
-                                serverDiv.className = 'server-item';
-                                serverDiv.dataset.serverName = server.name;
-                                serverDiv.innerHTML = \`
-                                    <div class="server-form">
-                                        <div class="form-group">
-                                            <label>Name:</label>
-                                            <input type="text" value="\${server.name}" data-index="\${index}" data-field="name">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Host:</label>
-                                            <input type="text" value="\${server.host}" data-index="\${index}" data-field="host">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Port:</label>
-                                            <input type="number" value="\${server.port}" data-index="\${index}" data-field="port">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Username:</label>
-                                            <input type="text" value="\${server.username}" data-index="\${index}" data-field="username">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Password:</label>
-                                            <input type="password" value="\${server.password}" data-index="\${index}" data-field="password">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>本地工作区目录:</label>
-                                            <input type="text" value="\${server.localPath}" data-index="\${index}" data-field="localPath" placeholder="输入本地工作区目录">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>远程目录:</label>
-                                            <input type="text" value="\${server.remotePath}" data-index="\${index}" data-field="remotePath" placeholder="输入远程目录">
-                                        </div>
-                                        <div class="actions">
-                                            <button class="deleteBtn" data-index="\${index}">Delete</button>
-                                        </div>
-                                    </div>
-                                \`;
+                        serverList.innerHTML = servers.map((server, index) => getServerHtml(server, index)).join('');
 
-                                serverDiv.querySelectorAll('input').forEach(input => {
-                                    input.addEventListener('change', (e) => {
-                                        const target = e.target;
-                                        const index = parseInt(target.dataset.index);
-                                        const field = target.dataset.field;
-                                        updateServer(index, field, target.value);
-                                    });
-                                });
-
-                                serverDiv.querySelector('.deleteBtn').addEventListener('click', () => {
-                                    deleteServer(index);
-                                });
-
-                                return serverDiv.outerHTML;
-                            }).join('');
-                        }
-
+                        // 重新绑定事件
                         document.querySelectorAll('.server-item input').forEach(input => {
                             input.addEventListener('change', (e) => {
                                 const target = e.target;
@@ -455,12 +416,65 @@ export class SettingsEditorProvider {
                             });
                         });
 
+                        // 绑定认证方式切换事件
+                        document.querySelectorAll('.auth-type').forEach(select => {
+                            select.addEventListener('change', (e) => {
+                                const target = e.target;
+                                const index = parseInt(target.dataset.index);
+                                const serverItem = target.closest('.server-item');
+                                const passwordGroup = serverItem.querySelector('.password-group');
+                                const keyGroup = serverItem.querySelector('.key-group');
+
+                                if (target.value === 'password') {
+                                    passwordGroup.style.display = 'block';
+                                    keyGroup.style.display = 'none';
+                                    // 清除密钥相关的值
+                                    updateServer(index, 'privateKeyPath', '');
+                                    updateServer(index, 'passphrase', '');
+                                } else {
+                                    passwordGroup.style.display = 'none';
+                                    keyGroup.style.display = 'block';
+                                    // 清除密码
+                                    updateServer(index, 'password', '');
+                                }
+                            });
+                        });
+
+                        // 绑定选择密钥文件按钮事件
+                        document.querySelectorAll('.select-key-btn').forEach(btn => {
+                            btn.addEventListener('click', async (e) => {
+                                const index = parseInt(btn.dataset.index);
+                                const serverItem = btn.closest('.server-item');
+                                const keyPathInput = serverItem.querySelector('[data-field="privateKeyPath"]');
+
+                                // 发送消息给 VS Code 来打开文件选择对话框
+                                vscode.postMessage({
+                                    command: 'selectKeyFile',
+                                    index: index
+                                });
+                            });
+                        });
+
                         document.querySelectorAll('.deleteBtn').forEach(btn => {
                             btn.addEventListener('click', (e) => {
                                 const index = parseInt(btn.dataset.index);
                                 deleteServer(index);
                             });
                         });
+
+                        updateEmptyState();
+                    }
+
+                    function updateEmptyState() {
+                        const emptyState = document.getElementById('emptyState');
+                        const serverList = document.getElementById('serverList');
+                        if (servers.length === 0) {
+                            emptyState.style.display = 'block';
+                            serverList.style.display = 'none';
+                        } else {
+                            emptyState.style.display = 'none';
+                            serverList.style.display = 'block';
+                        }
                     }
 
                     function updateServer(index, field, value) {
@@ -468,7 +482,6 @@ export class SettingsEditorProvider {
                     }
 
                     function addServer() {
-                        console.log('Adding server');
                         servers.push({
                             name: '',
                             host: '',
@@ -481,15 +494,12 @@ export class SettingsEditorProvider {
                         renderServers();
                     }
 
-                    async function deleteServer(index) {
-                        vscode.postMessage({
-                            command: 'confirmDelete',
-                            index: index
-                        });
+                    function deleteServer(index) {
+                        servers.splice(index, 1);
+                        renderServers();
                     }
 
                     function saveSettings() {
-                        console.log('Saving settings:', servers);
                         vscode.postMessage({
                             command: 'saveSettings',
                             servers: servers
@@ -498,9 +508,11 @@ export class SettingsEditorProvider {
                 </script>
             </body>
             </html>`;
+            
+        return htmlContent;
     }
 
-    private async handleMessage(message: any) {
+    public async handleMessage(message: any) {
         switch (message.type) {
             case 'updateSetting':
                 await vscode.workspace.getConfiguration('sftp-tools').update(
@@ -512,12 +524,51 @@ export class SettingsEditorProvider {
                 break;
             case 'saveSettings':
                 try {
+                    // 验证密钥文件配置
+                    const servers = message.servers;
+                    for (let i = 0; i < servers.length; i++) {
+                        const server = servers[i];
+                        if (!server.password && !server.privateKeyPath) {
+                            throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
+                        }
+                    }
                     await this._saveSettings(message.servers);
                     vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
                     vscode.commands.executeCommand('sftp-tools.refreshServers');
                     vscode.window.showInformationMessage('设置已保存');
                 } catch (error: any) {
                     vscode.window.showErrorMessage(`保存失败: ${error.message}`);
+                }
+                break;
+            case 'selectKeyFile':
+                try {
+                    const result = await vscode.window.showOpenDialog({
+                        canSelectFiles: true,
+                        canSelectFolders: false,
+                        canSelectMany: false,
+                        title: '选择私钥文件',
+                        filters: {
+                            'All files': ['*']
+                        }
+                    });
+                    
+                    if (result && result.length > 0) {
+                        const path = result[0].fsPath;
+                        this._view?.webview.postMessage({
+                            command: 'keyFileSelected',
+                            index: message.index,
+                            path: path
+                        });
+                        // 更新服务器配置
+                        this._view?.webview.postMessage({
+                            command: 'updateServer',
+                            index: message.index,
+                            field: 'privateKeyPath',
+                            value: path
+                        });
+                    }
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
                 }
                 break;
         }
