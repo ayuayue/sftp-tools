@@ -35,6 +35,7 @@
     "url": "https://github.com/ayuayue/sftp-tools/issues"
   },
   "homepage": "https://github.com/ayuayue/sftp-tools#readme",
+  "changelog": "https://github.com/ayuayue/sftp-tools/blob/main/CHANGELOG.md",
   "engines": {
     "vscode": "^1.93.0"
   },

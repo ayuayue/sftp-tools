@@ -1,9 +1,34 @@
-# Change Log
+# 更新日志
 
-All notable changes to the "sftp-tools" extension will be documented in this file.
+## [1.0.2] - 2024-03-14
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+### 改进
+- 优化了上传功能的用户体验
+- 增加了本地文件上传到服务器的功能
+- 改进了状态栏提示信息
+- 增加了中文界面支持
 
-## [Unreleased]
+### 修复
+- 修复了设置编辑器无法打开的问题
+- 修复了服务器断开连接后的状态显示问题
 
-- Initial release
+## [1.0.1] - 2024-03-13
+
+### 新增
+- 支持上传到多个服务器
+- 增加了服务器连接状态显示
+- 增加了文件下载功能
+- 增加了文件删除功能
+
+### 改进
+- 优化了服务器配置界面
+- 改进了错误提示信息
+
+## [1.0.0] - 2024-03-12
+
+### 初始版本
+- 基本的 SFTP 功能实现
+- 多服务器管理
+- 文件浏览器
+- 远程文件编辑
+- 文件上传/下载
