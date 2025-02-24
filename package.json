@@ -73,7 +73,8 @@
       {
         "command": "sftp-tools.openSettingsEditor",
         "title": "Open Settings Editor",
-        "icon": "$(gear)"
+        "icon": "$(gear)",
+        "category": "SFTP Tools"
       },
       {
         "command": "sftp-tools.refreshServers",
