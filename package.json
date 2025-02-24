@@ -3,7 +3,7 @@
   "displayName": "SFTP Tools",
   "description": "a nice sftp tools for vscode",
   "publisher": "caoayu",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/ayuayue/sftp-tools.git"
@@ -53,7 +53,8 @@
       {
         "command": "sftp-tools.openSettingsEditor",
         "title": "Open Settings Editor",
-        "icon": "$(gear)"
+        "icon": "$(gear)",
+        "category": "SFTP Tools"
       },
       {
         "command": "sftp-tools.refreshServers",

@@ -81,3 +81,11 @@ SFTP Tools 是一个用于 VS Code 的 SFTP 客户端扩展，提供了简单直
 ## 许可证
 
 [MIT](https://github.com/ayuayue/sftp-tools/blob/main/LICENSE)
+
+## 支持作者
+
+如果觉得这个扩展对你有帮助，可以请作者喝杯咖啡，支持作者继续开发。
+
+<img src="./media/alipay.png" alt="支付宝" width="200">
+
+<img src="./media/wechat_pay.png" alt="微信" width="200">
