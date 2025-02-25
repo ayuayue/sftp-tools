@@ -17,5 +17,21 @@
     "commands.cancelOperations": "Cancel Operations",
     "commands.disconnectServer": "Disconnect Server",
     "menus.uploadSubmenu": "SFTP Upload",
-    "configuration.title": "SFTP Tools"
+    "configuration.title": "SFTP Tools",
+    "commands.connectSSH": "Open SSH Terminal",
+    "commands.deleteRemoteDirectory": "Delete Remote Directory",
+    "configuration.showConfirmDialog.description": "Show confirmation dialog when deleting files",
+    "configuration.showConfirmDialog.markdownDescription": "Show confirmation dialog when deleting files or directories.\n- `true`: Show confirmation dialog before deletion\n- `false`: Delete without confirmation",
+    "configuration.servers.description": "SFTP server configurations",
+    "configuration.servers.name.description": "Server name",
+    "configuration.servers.host.description": "Server host",
+    "configuration.servers.port.description": "Server port",
+    "configuration.servers.username.description": "Username",
+    "configuration.servers.password.description": "Password",
+    "configuration.servers.privateKeyPath.description": "Private key file path",
+    "configuration.servers.passphrase.description": "Private key passphrase",
+    "configuration.servers.remotePath.description": "Remote path",
+    "commands.uploadDirectory": "Upload Directory",
+    "commands.uploadDirectoryToServer": "Upload Directory to Other Server...",
+    "commands.uploadDirectoryToAllServers": "Upload Directory to All Servers"
 } 

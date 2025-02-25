@@ -38,7 +38,8 @@ const zh = {
         yes: '是',
         no: '否',
         clickAddServerTip: '点击右上角 添加服务器 按钮开始配置',
-        clickSaveAllTip: '配置完成后点击 保存全部 按钮保存更改'
+        clickSaveAllTip: '配置完成后点击 保存全部 按钮保存更改',
+        configureNow: '配置服务器'
     },
     status: {
         uploading: '正在上传...',
@@ -51,10 +52,14 @@ const zh = {
         connected: '已连接',
         disconnected: '已断开连接',
         operationCancelled: '操作已取消',
-        noServer: '没有连接到服务器',
         noWorkspace: '没有找到工作区',
         directoryCreated: '目录已创建',
-        directoryCreateFailed: '创建目录失败'
+        directoryCreateFailed: '创建目录失败',
+        uploadingDirectory: '正在上传目录...',
+        uploadDirectorySuccess: '目录上传成功',
+        directoryDeleted: '目录已删除',
+        fileDeleted: '文件已删除',
+        uploadingToServer: '正在上传到 {0}'
     },
     messages: {
         confirmDelete: '确定要删除{0}吗？',
@@ -70,7 +75,10 @@ const zh = {
         uploadingToServer: '正在上传到 {0}...',
         uploadingProgress: '正在上传到 {0} ({1}/{2})',
         serverConnected: '已连接到 {0}',
-        serverDisconnected: '已断开与 {0} 的连接'
+        serverDisconnected: '已断开与 {0} 的连接',
+        autoInputPasswordPrompt: '是否自动输入保存的密码？',
+        sshConnectionFailed: 'SSH 连接失败: {0}',
+        noServer: '没有连接到服务器'
     }
 };
 
@@ -112,7 +120,8 @@ const en = {
         yes: 'Yes',
         no: 'No',
         clickAddServerTip: 'Click the Add Server button in the top right to start configuring',
-        clickSaveAllTip: 'Click Save All button to save changes after configuration'
+        clickSaveAllTip: 'Click Save All button to save changes after configuration',
+        configureNow: 'Configure Server'
     },
     status: {
         uploading: 'Uploading...',
@@ -125,10 +134,14 @@ const en = {
         connected: 'Connected',
         disconnected: 'Disconnected',
         operationCancelled: 'Operation cancelled',
-        noServer: 'No server connected',
         noWorkspace: 'No workspace found',
         directoryCreated: 'Directory created',
-        directoryCreateFailed: 'Failed to create directory'
+        directoryCreateFailed: 'Failed to create directory',
+        uploadingDirectory: 'Uploading directory...',
+        uploadDirectorySuccess: 'Directory upload successful',
+        directoryDeleted: 'Directory deleted',
+        fileDeleted: 'File deleted',
+        uploadingToServer: 'Uploading to {0}'
     },
     messages: {
         confirmDelete: 'Are you sure you want to delete {0}?',
@@ -144,7 +157,10 @@ const en = {
         uploadingToServer: 'Uploading to {0}...',
         uploadingProgress: 'Uploading to {0} ({1}/{2})',
         serverConnected: 'Connected to {0}',
-        serverDisconnected: 'Disconnected from {0}'
+        serverDisconnected: 'Disconnected from {0}',
+        autoInputPasswordPrompt: 'Do you want to auto-input the saved password?',
+        sshConnectionFailed: 'SSH connection failed: {0}',
+        noServer: 'No server connected'
     }
 };
 

@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { SftpServersProvider, SftpExplorerProvider } from './sftpViewProvider';
 import { SettingsEditorProvider } from './settingsEditor';
 import { ServerItem } from './sftpViewProvider';
+import { getLocaleText } from './i18n';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -113,8 +114,8 @@ export function activate(context: vscode.ExtensionContext) {
 			sftpExplorerProvider.openFile(item, true);
 		}),
 		vscode.commands.registerCommand('sftp-tools.connectServer', (serverItem: ServerItem) => {
-			if (serverItem.serverConfig) {
-				sftpExplorerProvider.connectToServer(serverItem.serverConfig);
+			if (serverItem.config) {
+				sftpExplorerProvider.connectToServer(serverItem.config);
 			}
 		}),
 		vscode.commands.registerCommand('sftp-tools._updateUploadButton', () => {
@@ -182,6 +183,106 @@ export function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('sftp-tools.disconnectAllServers', () => {
 			sftpExplorerProvider.disconnectAllServers();
+		}),
+		vscode.commands.registerCommand('sftp-tools.connectSSH', (serverItem: ServerItem) => {
+			sftpServersProvider.connectSSH(serverItem);
+		}),
+		vscode.commands.registerCommand('sftp-tools.uploadDirectory', async (uri: vscode.Uri) => {
+			const servers = sftpExplorerProvider.getServers();
+			const i18n = getLocaleText();
+			if (servers.length === 0) {
+				const answer = await vscode.window.showInformationMessage(
+					i18n.messages.noServersConfigured,
+					i18n.settings.configureNow,
+					i18n.settings.no
+				);
+				if (answer === i18n.settings.configureNow) {
+					vscode.commands.executeCommand('sftp-tools.openSettingsEditor');
+				}
+				return;
+			}
+			const currentServer = sftpExplorerProvider.getCurrentServer();
+			if (!currentServer) {
+				const answer = await vscode.window.showInformationMessage(
+					i18n.messages.noServer,
+					i18n.messages.selectServer,
+					i18n.settings.no
+				);
+				if (answer === i18n.messages.selectServer) {
+					vscode.commands.executeCommand('sftp-tools.uploadDirectoryToServer', uri);
+				}
+				return;
+			}
+			await sftpExplorerProvider.uploadDirectory(uri, currentServer);
+		}),
+		vscode.commands.registerCommand('sftp-tools.uploadDirectoryToServer', async (uri: vscode.Uri) => {
+			const servers = sftpExplorerProvider.getServers();
+			const i18n = getLocaleText();
+			if (servers.length === 0) {
+				vscode.window.showInformationMessage(i18n.messages.noServersConfigured);
+				return;
+			}
+
+			// 创建服务器选择列表
+			const items = servers.map(server => ({
+				label: server.name,
+				description: `${server.host}:${server.port}`,
+				server: server
+			}));
+
+			const selected = await vscode.window.showQuickPick(items, {
+				placeHolder: i18n.messages.selectServer
+			});
+
+			if (selected) {
+				// 先连接并激活服务器
+				await sftpExplorerProvider.connectToServer(selected.server);
+				// 然后上传目录
+				await sftpExplorerProvider.uploadDirectory(uri, selected.server);
+			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.uploadDirectoryToAllServers', async (uri: vscode.Uri) => {
+			const servers = sftpExplorerProvider.getServers();
+			const i18n = getLocaleText();
+			if (servers.length === 0) {
+				vscode.window.showInformationMessage(i18n.messages.noServersConfigured);
+				return;
+			}
+
+			let successCount = 0;
+			let failCount = 0;
+
+			await vscode.window.withProgress({
+				location: vscode.ProgressLocation.Notification,
+				title: i18n.status.uploadingDirectory,
+				cancellable: false
+			}, async (progress) => {
+				const total = servers.length;
+				
+				for (let i = 0; i < servers.length; i++) {
+					const server = servers[i];
+					progress.report({ 
+						message: `${i18n.status.uploadingToServer.replace('{0}', server.name)} (${i + 1}/${total})`,
+						increment: (100 / total)
+					});
+
+					try {
+						await sftpExplorerProvider.uploadDirectory(uri, server);
+						successCount++;
+					} catch (error: any) {
+						failCount++;
+						vscode.window.showErrorMessage(i18n.messages.operationFailed.replace('{0}', `${server.name}: ${error.message}`));
+					}
+				}
+			});
+
+			if (failCount === 0) {
+				vscode.window.showInformationMessage(i18n.messages.uploadComplete);
+			} else {
+				vscode.window.showWarningMessage(
+					i18n.messages.uploadPartialSuccess.replace('{0}', successCount.toString()).replace('{1}', failCount.toString())
+				);
+			}
 		})
 	);
 

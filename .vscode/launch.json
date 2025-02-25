@@ -12,7 +12,7 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				// "${workspaceFolder}/dist"
+				"${workspaceFolder}/dist"
 			],
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js"

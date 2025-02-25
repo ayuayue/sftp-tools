@@ -17,5 +17,21 @@
     "commands.cancelOperations": "取消操作",
     "commands.disconnectServer": "断开连接",
     "menus.uploadSubmenu": "SFTP 上传",
-    "configuration.title": "SFTP Tools"
+    "configuration.title": "SFTP Tools",
+    "commands.connectSSH": "打开 SSH 终端",
+    "commands.deleteRemoteDirectory": "删除远程目录",
+    "configuration.showConfirmDialog.description": "删除文件时是否显示确认对话框",
+    "configuration.showConfirmDialog.markdownDescription": "删除文件或目录时是否显示确认对话框。\n- `true`: 删除前显示确认对话框\n- `false`: 直接删除，不显示确认",
+    "configuration.servers.description": "SFTP 服务器配置",
+    "configuration.servers.name.description": "服务器名称",
+    "configuration.servers.host.description": "主机地址",
+    "configuration.servers.port.description": "端口",
+    "configuration.servers.username.description": "用户名",
+    "configuration.servers.password.description": "密码",
+    "configuration.servers.privateKeyPath.description": "私钥文件路径",
+    "configuration.servers.passphrase.description": "私钥密码短语",
+    "configuration.servers.remotePath.description": "远程路径",
+    "commands.uploadDirectory": "上传目录",
+    "commands.uploadDirectoryToServer": "上传目录到其他服务器...",
+    "commands.uploadDirectoryToAllServers": "上传目录到所有服务器"
 } 

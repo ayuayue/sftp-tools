@@ -3,7 +3,7 @@
   "displayName": "SFTP Tools",
   "description": "A powerful SFTP/FTP client for VS Code with an intuitive interface",
   "publisher": "caoayu",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "author": {
     "name": "caoayu",
     "email": "caoayu80@gmail.com"
@@ -125,6 +125,31 @@
         "title": "%commands.cancelOperations%",
         "icon": "$(stop-circle)",
         "category": "SFTP Tools"
+      },
+      {
+        "command": "sftp-tools.connectSSH",
+        "title": "%commands.connectSSH%",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "sftp-tools.deleteRemoteDirectory",
+        "title": "%commands.deleteRemoteDirectory%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sftp-tools.uploadDirectory",
+        "title": "%commands.uploadDirectory%",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "sftp-tools.uploadDirectoryToServer",
+        "title": "%commands.uploadDirectoryToServer%",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "sftp-tools.uploadDirectoryToAllServers",
+        "title": "%commands.uploadDirectoryToAllServers%",
+        "icon": "$(cloud-upload)"
       }
     ],
     "configuration": {
@@ -230,7 +255,8 @@
           "command": "sftp-tools.disconnectServer",
           "when": "view == sftp-tools-servers && viewItem == activeServer",
           "group": "inline"
-        },{
+        },
+        {
           "command": "sftp-tools.downloadRemoteFile",
           "when": "view == sftp-tools-explorer && viewItem == file",
           "group": "1_modification"
@@ -239,6 +265,11 @@
           "command": "sftp-tools.deleteRemoteFile",
           "when": "view == sftp-tools-explorer && (viewItem == file || viewItem == directory)",
           "group": "1_modification"
+        },
+        {
+          "command": "sftp-tools.connectSSH",
+          "when": "view == sftp-tools-servers",
+          "group": "inline"
         }
       ],
       "editor/title": [
@@ -255,36 +286,64 @@
           "group": "sftp-tools@1"
         }
       ],
-      "sftp-tools.uploadSubmenu": [
-        {
-          "command": "sftp-tools.uploadFile",
-          "title": "%commands.uploadFile%",
-          "when": "resourceScheme == file",
-          "group": "upload@1"
-        },
-        {
-          "command": "sftp-tools.uploadToServer",
-          "title": "%commands.uploadToServer%",
-          "when": "resourceScheme == file",
-          "group": "upload@2"
-        },
-        {
-          "command": "sftp-tools.uploadToAllServers",
-          "title": "%commands.uploadToAllServers%",
-          "when": "resourceScheme == file",
-          "group": "upload@3"
-        }
-      ],
       "explorer/context": [
         {
+          "submenu": "sftp-tools.uploadSubmenu",
+          "when": "resourceScheme == file",
+          "group": "2_workspace@1"
+        },
+        {
           "command": "sftp-tools.deleteRemoteFile",
-          "when": "resourceScheme == 'sftp'",
+          "when": "resourceScheme == 'sftp' && !explorerResourceIsFolder",
+          "group": "2_modification"
+        },
+        {
+          "command": "sftp-tools.deleteRemoteDirectory",
+          "when": "resourceScheme == 'sftp' && explorerResourceIsFolder",
           "group": "2_modification"
         },
         {
           "command": "sftp-tools.downloadRemoteFile",
           "when": "resourceScheme == 'sftp'",
           "group": "2_modification"
+        }
+      ],
+      "sftp-tools.uploadSubmenu": [
+        {
+          "command": "sftp-tools.uploadFile",
+          "title": "%commands.uploadFile%",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "upload@1"
+        },
+        {
+          "command": "sftp-tools.uploadDirectory",
+          "title": "%commands.uploadDirectory%",
+          "when": "resourceScheme == file && explorerResourceIsFolder",
+          "group": "upload@1"
+        },
+        {
+          "command": "sftp-tools.uploadDirectoryToServer",
+          "title": "%commands.uploadToServer%",
+          "when": "resourceScheme == file && explorerResourceIsFolder",
+          "group": "upload@2"
+        },
+        {
+          "command": "sftp-tools.uploadDirectoryToAllServers",
+          "title": "%commands.uploadToAllServers%",
+          "when": "resourceScheme == file && explorerResourceIsFolder",
+          "group": "upload@3"
+        },
+        {
+          "command": "sftp-tools.uploadToServer",
+          "title": "%commands.uploadToServer%",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "upload@2"
+        },
+        {
+          "command": "sftp-tools.uploadToAllServers",
+          "title": "%commands.uploadToAllServers%",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "upload@3"
         }
       ]
     },
