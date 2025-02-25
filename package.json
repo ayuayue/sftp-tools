@@ -3,7 +3,7 @@
   "displayName": "SFTP Tools",
   "description": "A powerful SFTP/FTP client for VS Code with an intuitive interface",
   "publisher": "caoayu",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "author": {
     "name": "caoayu",
     "email": "caoayu80@gmail.com"
@@ -40,7 +40,8 @@
     "vscode": "^1.93.0"
   },
   "activationEvents": [
-    "onStartupFinished"
+    "onView:sftp-tools-servers",
+    "onView:sftp-tools-explorer"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -301,6 +302,7 @@
         {
           "id": "sftp-tools-servers",
           "name": "SFTP 服务器",
+          "type": "tree",
           "icon": "resources/server.svg",
           "contextualTitle": "SFTP 服务器"
         },

@@ -226,7 +226,8 @@ export class SettingsEditorProvider {
                         background: var(--vscode-editor-background);
                         padding: 10px;
                         border-radius: 4px;
-                        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                        box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+                        z-index: 100;
                     }
                     .server-list {
                         margin-bottom: 80px;
@@ -296,6 +297,47 @@ export class SettingsEditorProvider {
                     }
                     .key-group, .password-group {
                         margin-top: 8px;
+                    }
+                    
+                    button {
+                        background-color: var(--vscode-button-background);
+                        color: var(--vscode-button-foreground);
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 2px;
+                        cursor: pointer;
+                        font-size: 13px;
+                        line-height: 18px;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 4px;
+                    }
+                    
+                    button:hover {
+                        background-color: var(--vscode-button-hoverBackground);
+                    }
+                    
+                    button:active {
+                        background-color: var(--vscode-button-background);
+                        transform: translateY(1px);
+                    }
+                    
+                    button.secondary {
+                        background-color: var(--vscode-button-secondaryBackground);
+                        color: var(--vscode-button-secondaryForeground);
+                    }
+                    
+                    button.secondary:hover {
+                        background-color: var(--vscode-button-secondaryHoverBackground);
+                    }
+                    
+                    .deleteBtn {
+                        background-color: var(--vscode-errorForeground);
+                    }
+                    
+                    .deleteBtn:hover {
+                        background-color: color-mix(in srgb, var(--vscode-errorForeground) 85%, black);
                     }
                 </style>
             </head>
