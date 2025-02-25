@@ -351,7 +351,7 @@
       "activitybar": [
         {
           "id": "sftp-tools",
-          "title": "SFTP Tools",
+          "title": "%configuration.title%",
           "icon": "media/sftp.svg"
         }
       ]
@@ -362,7 +362,7 @@
           "id": "sftp-tools-servers",
           "name": "%views.servers.title%",
           "type": "tree",
-          "icon": "resources/server.svg",
+          "icon": "media/sftp.svg",
           "contextualTitle": "%views.servers.title%"
         },
         {
@@ -381,7 +381,7 @@
     "l10n": [
       {
         "id": "zh-cn",
-        "path": "./l10n/bundle.l10n.json"
+        "path": "./package.nls.zh-cn.json"
       },
       {
         "id": "en",
@@ -417,5 +417,9 @@
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "@types/ssh2": "^1.11.19"
-  }
+  },
+  "extensionDependencies": [],
+  "extensionKind": [
+    "workspace"
+  ]
 }
