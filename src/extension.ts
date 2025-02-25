@@ -283,6 +283,10 @@ export function activate(context: vscode.ExtensionContext) {
 					i18n.messages.uploadPartialSuccess.replace('{0}', successCount.toString()).replace('{1}', failCount.toString())
 				);
 			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.settingsUpdated', (servers) => {
+			// 通知设置编辑器配置已更新
+			settingsEditorProvider.notifySettingsUpdated(servers);
 		})
 	);
 

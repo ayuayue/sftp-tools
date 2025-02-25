@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import { ServerItem } from './sftpViewProvider';
 import path from 'path';
 import { getLocaleText } from './i18n';
+import * as fs from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
 
 declare global {
     interface Window {
@@ -9,13 +12,57 @@ declare global {
     }
 }
 
+// 配置文件名
+const CONFIG_FILE_NAME = 'sftp-tools.json';
+
 export class SettingsEditorProvider {
     public static readonly viewType = 'sftp-tools.settingsEditor';
     private _view?: vscode.WebviewPanel;
+    private configFilePath: string = '';
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
     ) {
+        this.initConfigFilePath();
+    }
+
+    private initConfigFilePath() {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (workspaceFolder) {
+            // 创建 .vscode 文件夹（如果不存在）
+            const vscodePath = path.join(workspaceFolder.uri.fsPath, '.vscode');
+            if (!fs.existsSync(vscodePath)) {
+                fs.mkdirSync(vscodePath, { recursive: true });
+            }
+            this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
+        }
+    }
+
+    // 从文件加载服务器配置
+    private loadServersFromFile(): any[] {
+        try {
+            if (this.configFilePath && fs.existsSync(this.configFilePath)) {
+                const configContent = fs.readFileSync(this.configFilePath, 'utf8');
+                return JSON.parse(configContent).servers || [];
+            }
+        } catch (error) {
+            console.error('Failed to load configuration:', error);
+        }
+        return [];
+    }
+
+    // 将服务器配置保存到文件
+    private saveServersToFile(servers: any[]): boolean {
+        try {
+            if (this.configFilePath) {
+                const configData = { servers };
+                fs.writeFileSync(this.configFilePath, JSON.stringify(configData, null, 2), 'utf8');
+                return true;
+            }
+        } catch (error) {
+            console.error('Failed to save configuration:', error);
+        }
+        return false;
     }
 
     private async deleteRemoteFile(fileUri: vscode.Uri) {
@@ -62,12 +109,12 @@ export class SettingsEditorProvider {
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
-                localResourceRoots: [this._extensionUri]
+                localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'out'), vscode.Uri.joinPath(this._extensionUri, 'src', 'webview')],
+                enableCommandUris: true
             }
         );
 
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const servers = config.get('servers') || [];
+        const servers = this.loadServersFromFile();
         
         this._view.webview.html = this._getHtmlForWebview();
         
@@ -98,10 +145,13 @@ export class SettingsEditorProvider {
                                     throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
                                 }
                             }
-                            await this._saveSettings(message.servers);
-                            vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
-                            vscode.commands.executeCommand('sftp-tools.refreshServers');
-                            vscode.window.showInformationMessage('设置已保存');
+                            if (this.saveServersToFile(message.servers)) {
+                                vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
+                                vscode.commands.executeCommand('sftp-tools.refreshServers');
+                                vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
+                            } else {
+                                vscode.window.showErrorMessage(getLocaleText().messages.settingsSaveFailed);
+                            }
                         } catch (error: any) {
                             vscode.window.showErrorMessage(`保存失败: ${error.message}`);
                         }
@@ -112,7 +162,7 @@ export class SettingsEditorProvider {
                                 canSelectFiles: true,
                                 canSelectFolders: false,
                                 canSelectMany: false,
-                                title: '选择私钥文件',
+                                title: getLocaleText().settings.selectPrivateKey,
                                 filters: {
                                     'All files': ['*']
                                 }
@@ -131,6 +181,24 @@ export class SettingsEditorProvider {
                             vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
                         }
                         break;
+                    case 'confirmDelete':
+                        const i18n = getLocaleText();
+                        const answer = await vscode.window.showWarningMessage(
+                            i18n.settings.deleteConfirm,
+                            i18n.settings.yes,
+                            i18n.settings.no
+                        );
+                        if (answer === i18n.settings.yes) {
+                            // 用户确认删除，通知 webview
+                            this._view?.webview.postMessage({
+                                command: 'deleteConfirmed',
+                                index: message.index
+                            });
+                        }
+                        break;
+                    case 'deleteConfirmed':
+                        this.removeServer(message.index);
+                        break;
                     default:
                         const errorAnswer = await vscode.window.showWarningMessage(
                             'Invalid command received. Please check your input.',
@@ -145,419 +213,806 @@ export class SettingsEditorProvider {
         });
     }
 
-    public async _saveSettings(servers: any[]) {
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        await config.update('servers', servers, vscode.ConfigurationTarget.Global);
-    }
-
-    public async _setPaths(localPath: string, remotePath: string, serverId?: string) {
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const servers = config.get('servers') as Array<{
-            id: string;
-            localPath: string;
-            remotePath: string;
-        }> || [];
-        
-        if (serverId) {
-            const serverIndex = servers.findIndex(s => s.id === serverId);
-            if (serverIndex !== -1) {
-                servers[serverIndex].localPath = localPath;
-                servers[serverIndex].remotePath = remotePath;
-                await config.update('servers', servers, vscode.ConfigurationTarget.Global);
-            }
-        } else {
-            await config.update('localPath', localPath, vscode.ConfigurationTarget.Global);
-            await config.update('remotePath', remotePath, vscode.ConfigurationTarget.Global);
-        }
-        
-        vscode.window.showInformationMessage('Paths set successfully!');
-    }
-
-    public _getHtmlForWebview(): string {
+    private _getHtmlForWebview(): string {
         const i18n = getLocaleText();
         const nonce = getNonce();
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const servers = config.get('servers') || [];
-        const serversJson = JSON.stringify(servers);
+        const serversJson = JSON.stringify(this.loadServersFromFile());
         
-        const htmlContent = /* html */`<!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-                <title>${i18n.settings.title}</title>
-                <style>
-                    body { 
-                        padding: 20px; 
-                        min-height: 100vh;
-                        margin: 0;
-                        box-sizing: border-box;
-                    }
-                    .server-form { margin-bottom: 20px; }
-                    input, button { margin: 5px 0; }
-                    .server-list { margin-top: 20px; }
-                    .server-item { 
-                        border: 1px solid var(--vscode-input-border); 
-                        padding: 10px; 
-                        margin: 10px 0; 
-                    }
-                    .form-group {
-                        margin-bottom: 10px;
-                    }
-                    .form-group label {
-                        display: block;
-                        margin-bottom: 5px;
-                    }
-                    .form-group input {
-                        width: 100%;
-                        padding: 5px;
-                        background: var(--vscode-input-background);
-                        color: var(--vscode-input-foreground);
-                        border: 1px solid var(--vscode-input-border);
-                    }
-                    .actions {
-                        margin-top: 10px;
-                        display: flex;
-                        justify-content: flex-end;
-                    }
-                    .global-actions {
-                        position: fixed;
-                        bottom: 20px;
-                        right: 20px;
-                        background: var(--vscode-editor-background);
-                        padding: 10px;
-                        border-radius: 4px;
-                        box-shadow: 0 2px 8px var(--vscode-widget-shadow);
-                        z-index: 100;
-                    }
-                    .server-list {
-                        margin-bottom: 80px;
-                    }
-                    
-                    /* 空状态样式 */
-                    .empty-state {
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        text-align: center;
-                        width: 100%;
-                        max-width: 400px;
-                    }
-                    
-                    .empty-state-text {
-                        font-size: 14px;
-                        margin-bottom: 8px;
-                        color: var(--vscode-foreground);
-                    }
-                    
-                    .empty-state-tip {
-                        font-size: 13px;
-                        color: var(--vscode-descriptionForeground);
-                        opacity: 0.8;
-                        margin-bottom: 6px;
-                    }
-                    
-                    .highlight {
-                        color: var(--vscode-textLink-foreground);
-                        font-weight: 500;
-                    }
-
-                    /* 添加服务器按钮样式 */
-                    .add-server-btn {
-                        position: fixed;
-                        top: 20px;
-                        right: 20px;
-                        padding: 8px 16px;
-                        background: var(--vscode-button-background);
-                        color: var(--vscode-button-foreground);
-                        border: none;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        display: flex;
-                        align-items: center;
-                        gap: 5px;
-                    }
-                    .add-server-btn:hover {
-                        background: var(--vscode-button-hoverBackground);
-                    }
-                    .key-input-group {
-                        display: flex;
-                        gap: 8px;
-                    }
-                    .select-key-btn {
-                        white-space: nowrap;
-                        padding: 4px 8px;
-                    }
-                    .auth-type {
-                        width: 100%;
-                        padding: 5px;
-                        background: var(--vscode-input-background);
-                        color: var(--vscode-input-foreground);
-                        border: 1px solid var(--vscode-input-border);
-                    }
-                    .key-group, .password-group {
-                        margin-top: 8px;
-                    }
-                    
-                    button {
-                        background-color: var(--vscode-button-background);
-                        color: var(--vscode-button-foreground);
-                        border: none;
-                        padding: 8px 16px;
-                        border-radius: 2px;
-                        cursor: pointer;
-                        font-size: 13px;
-                        line-height: 18px;
-                        display: inline-flex;
-                        align-items: center;
-                        justify-content: center;
-                        gap: 4px;
-                    }
-                    
-                    button:hover {
-                        background-color: var(--vscode-button-hoverBackground);
-                    }
-                    
-                    button:active {
-                        background-color: var(--vscode-button-background);
-                        transform: translateY(1px);
-                    }
-                    
-                    button.secondary {
-                        background-color: var(--vscode-button-secondaryBackground);
-                        color: var(--vscode-button-secondaryForeground);
-                    }
-                    
-                    button.secondary:hover {
-                        background-color: var(--vscode-button-secondaryHoverBackground);
-                    }
-                    
-                    .deleteBtn {
-                        background-color: var(--vscode-errorForeground);
-                    }
-                    
-                    .deleteBtn:hover {
-                        background-color: color-mix(in srgb, var(--vscode-errorForeground) 85%, black);
-                    }
-                </style>
-            </head>
-            <body>
-                <div id="content">
-                    <button id="addServerBtn" class="add-server-btn">
-                        <span class="codicon codicon-add"></span>
-                        添加服务器
-                    </button>
-                    <div id="serverList" class="server-list"></div>
-                    <div id="emptyState" class="empty-state">
-                        <div class="empty-state-text">${i18n.settings.emptyTip}</div>
-                        <div class="empty-state-tip">
-                            ${i18n.settings.clickAddServerTip}
+        // 读取全局配置
+        const config = vscode.workspace.getConfiguration('sftp-tools');
+        const showDeleteConfirm = config.get('showConfirmDialog', true);
+        
+        // 直接构建 HTML 字符串，包含内联样式和脚本
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="zh-cn">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+            <title>${i18n.settings.title}</title>
+            <style>
+                :root {
+                    --container-padding: 20px;
+                    --input-padding-vertical: 6px;
+                    --input-padding-horizontal: 12px;
+                }
+                
+                body, html {
+                    height: 100%;
+                    padding: 0;
+                    margin: 0;
+                    font-family: var(--vscode-font-family);
+                    background-color: var(--vscode-editor-background);
+                    color: var(--vscode-foreground);
+                }
+                
+                .app-container {
+                    display: flex;
+                    flex-direction: column;
+                    height: 100vh;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                /* 头部样式 */
+                .header {
+                    padding: 10px 20px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    background-color: var(--vscode-sideBar-background);
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                
+                /* 设置选项卡样式 */
+                .settings-tab-bar {
+                    display: flex;
+                    background-color: var(--vscode-sideBar-background);
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    overflow-x: auto;
+                }
+                
+                .settings-tab {
+                    padding: 8px 16px;
+                    cursor: pointer;
+                    white-space: nowrap;
+                    border-bottom: 2px solid transparent;
+                    color: var(--vscode-foreground);
+                    opacity: 0.8;
+                    transition: all 0.2s ease;
+                }
+                
+                .settings-tab:hover {
+                    opacity: 1;
+                }
+                
+                .settings-tab.active {
+                    border-bottom-color: var(--vscode-activityBar-activeBorder);
+                    opacity: 1;
+                    font-weight: 500;
+                }
+                
+                /* 面板样式 */
+                .settings-panel {
+                    display: none;
+                    padding: 20px;
+                    width: 100%;
+                }
+                
+                .settings-panel.active {
+                    display: block;
+                }
+                
+                /* 侧边栏样式 */
+                .sidebar {
+                    display: flex;
+                    flex-direction: column;
+                    height: 100%;
+                    width: 250px;
+                    background-color: var(--vscode-sideBar-background);
+                    border-right: 1px solid var(--vscode-panel-border);
+                }
+                
+                /* 服务器设置面板特殊样式 */
+                #serversSettingsPanel.active {
+                    display: flex;
+                    padding: 0;
+                }
+                
+                /* 通用设置面板样式 */
+                #generalSettingsPanel {
+                    max-width: 800px;
+                    margin: 0 auto;
+                    background-color: var(--vscode-editor-background);
+                }
+                
+                /* 修复服务器名称输入框样式 */
+                .server-name-input {
+                    width: 100%;
+                    display: block;
+                    margin-bottom: 0;
+                }
+                
+                /* 确保两个面板完全分离 */
+                #generalSettingsPanel,
+                #serversSettingsPanel {
+                    height: 100%;
+                    overflow: auto;
+                }
+                
+                /* 服务器导航项 */
+                .server-nav {
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                    overflow-y: auto;
+                }
+                
+                .server-nav-item {
+                    padding: 8px 12px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    border-left: 3px solid transparent;
+                }
+                
+                .server-nav-item:hover {
+                    background-color: var(--vscode-list-hoverBackground);
+                }
+                
+                .server-nav-item.active {
+                    background-color: var(--vscode-list-activeSelectionBackground);
+                    color: var(--vscode-list-activeSelectionForeground);
+                    border-left-color: var(--vscode-activityBar-activeBorder);
+                }
+                
+                .server-nav-item-icon {
+                    margin-right: 8px;
+                }
+                
+                /* 主内容区 */
+                .main-content {
+                    flex: 1;
+                    padding: 20px;
+                    overflow-y: auto;
+                }
+                
+                /* 服务器卡片 */
+                .server-item {
+                    background-color: var(--vscode-editor-background);
+                    border-radius: 6px;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+                    padding: 0;
+                    margin-bottom: 20px;
+                }
+                
+                .box-section {
+                    padding: 15px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                
+                .box-header {
+                    font-weight: bold;
+                    margin-bottom: 12px;
+                    color: var(--vscode-foreground);
+                    opacity: 0.8;
+                }
+                
+                /* 表单元素 */
+                .form-group {
+                    margin-bottom: 12px;
+                    display: flex;
+                    flex-direction: column;
+                }
+                
+                .form-group label {
+                    margin-bottom: 4px;
+                    font-size: 12px;
+                    opacity: 0.8;
+                }
+                
+                input[type="text"],
+                input[type="password"],
+                input[type="number"] {
+                    padding: var(--input-padding-vertical) var(--input-padding-horizontal);
+                    border: 1px solid var(--vscode-input-border);
+                    background-color: var(--vscode-input-background);
+                    color: var(--vscode-input-foreground);
+                    border-radius: 2px;
+                }
+                
+                input[type="text"]:focus,
+                input[type="password"]:focus,
+                input[type="number"]:focus {
+                    outline: 1px solid var(--vscode-focusBorder);
+                }
+                
+                /* 认证选项 */
+                .auth-options {
+                    display: flex;
+                    margin-bottom: 12px;
+                }
+                
+                .auth-option {
+                    padding: 6px 12px;
+                    border: 1px solid var(--vscode-panel-border);
+                    cursor: pointer;
+                    border-radius: 3px;
+                    margin-right: 8px;
+                    opacity: 0.7;
+                }
+                
+                .auth-option:hover {
+                    opacity: 0.9;
+                }
+                
+                .auth-option.active {
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border-color: var(--vscode-button-background);
+                    opacity: 1;
+                }
+                
+                /* 按钮样式 */
+                button {
+                    padding: 6px 12px;
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    cursor: pointer;
+                    display: inline-flex;
+                    align-items: center;
+                    border-radius: 2px;
+                }
+                
+                button:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+                
+                .add-server-btn {
+                    margin-right: 8px;
+                }
+                
+                .delete-btn {
+                    background-color: var(--vscode-errorForeground);
+                }
+                
+                .delete-btn:hover {
+                    opacity: 0.8;
+                }
+                
+                .button-icon {
+                    margin-right: 6px;
+                }
+                
+                /* 私钥文件选择器 */
+                .key-file-selector {
+                    display: flex;
+                }
+                
+                .key-file-selector input {
+                    flex: 1;
+                    margin-right: 8px;
+                }
+                
+                /* 操作栏 */
+                .actions {
+                    padding: 12px;
+                    display: flex;
+                    justify-content: flex-end;
+                }
+                
+                /* 空状态 */
+                .empty-state {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100%;
+                    opacity: 0.7;
+                    text-align: center;
+                }
+                
+                .empty-icon {
+                    font-size: 48px;
+                    margin-bottom: 16px;
+                }
+                
+                .empty-state h2 {
+                    margin-bottom: 12px;
+                }
+                
+                .empty-state-tip {
+                    margin-bottom: 8px;
+                    max-width: 400px;
+                }
+                
+                /* 侧边栏头部 */
+                .sidebar-header {
+                    padding: 10px;
+                    font-weight: bold;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                
+                /* 侧边栏底部 */
+                .sidebar-footer {
+                    padding: 10px;
+                    border-top: 1px solid var(--vscode-panel-border);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+                
+                #addServerBtn {
+                    width: 100%;
+                    justify-content: center;
+                }
+                
+                #saveSettingsBtn {
+                    width: 100%;
+                    justify-content: center;
+                }
+                
+                /* 开关样式 */
+                .setting-item {
+                    display: flex;
+                    align-items: center;
+                    padding: 10px 0;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    justify-content: space-between;
+                }
+                
+                .setting-item-label {
+                    flex: 1;
+                }
+                
+                .setting-item-description {
+                    margin-top: 4px;
+                    font-size: 12px;
+                    opacity: 0.8;
+                }
+                
+                .toggle-switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 40px;
+                    height: 20px;
+                    margin-right: 8px;
+                }
+                
+                .toggle-switch input {
+                    opacity: 0;
+                    width: 0;
+                    height: 0;
+                }
+                
+                .slider {
+                    position: absolute;
+                    cursor: pointer;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-color: var(--vscode-checkbox-background);
+                    transition: .4s;
+                    border-radius: 10px;
+                    border: 1px solid var(--vscode-checkbox-border);
+                }
+                
+                .slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 14px;
+                    width: 14px;
+                    left: 2px;
+                    bottom: 2px;
+                    background-color: var(--vscode-checkbox-foreground);
+                    transition: .4s;
+                    border-radius: 50%;
+                }
+                
+                input:checked + .slider {
+                    background-color: var(--vscode-inputOption-activeBackground);
+                }
+                
+                input:checked + .slider:before {
+                    transform: translateX(20px);
+                }
+            </style>
+        </head>
+        <body>
+            <div class="app-container">
+                <div class="header">
+                    <h1>${i18n.settings.title}</h1>
+                </div>
+                
+                <div class="settings-tab-bar">
+                    <div class="settings-tab active" data-tab="general">${i18n.settings.generalSettings}</div>
+                    <div class="settings-tab" data-tab="servers">${i18n.settings.serverSettings}</div>
+                </div>
+                
+                <div class="content-container" style="flex: 1; overflow: hidden;">
+                    <!-- 通用设置面板 -->
+                    <div id="generalSettingsPanel" class="settings-panel active" style="padding: 20px; height: 100%;">
+                        <div class="setting-item">
+                            <div class="setting-item-label">
+                                <div>${i18n.settings.showDeleteConfirm}</div>
+                                <div class="setting-item-description">${i18n.settings.showDeleteConfirmDesc}</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showDeleteConfirmToggle" ${showDeleteConfirm ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
                         </div>
-                        <div class="empty-state-tip">
-                            配置完成后点击 <span class="highlight">保存全部</span> 按钮保存更改
+                    </div>
+                    
+                    <!-- 服务器设置面板 -->
+                    <div id="serversSettingsPanel" class="settings-panel" style="height: 100%;">
+                        <div class="sidebar">
+                            <div class="sidebar-header">${i18n.view.servers}</div>
+                            <ul class="server-nav" id="serverNav"></ul>
+                            <div class="sidebar-footer">
+                                <button id="addServerBtn" class="add-server-btn">
+                                    <span class="codicon codicon-add"></span>
+                                    ${i18n.settings.addServer}
+                                </button>
+                                <button id="saveSettingsBtn" class="primary-btn">
+                                    <span class="codicon codicon-save"></span>
+                                    ${i18n.settings.saveAll}
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="main-content">
+                            <div id="serverPanels" class="server-list"></div>
+                            <div id="emptyState" class="empty-state">
+                                <div class="empty-icon">⚙️</div>
+                                <h2>${i18n.settings.emptyTip}</h2>
+                                <div class="empty-state-tip">
+                                    ${i18n.settings.clickAddServerTip}
+                                </div>
+                                <div class="empty-state-tip">
+                                    ${i18n.settings.clickSaveAllTip}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="global-actions" id="globalActions">
-                    <button id="saveSettingsBtn">${i18n.settings.saveAll}</button>
-                </div>
-                <script nonce="${nonce}">
-                    const vscode = acquireVsCodeApi();
-                    let servers = ${serversJson};
-
-                    // 添加消息处理
-                    window.addEventListener('message', event => {
-                        const message = event.data;
-                        switch (message.command) {
-                            case 'loadSettings':
-                                servers = message.servers;
-                                renderServers();
-                                break;
-                            case 'keyFileSelected':
-                                // 更新服务器配置
+            </div>
+            
+            <script nonce="${nonce}">
+                // 全局变量
+                const vscode = acquireVsCodeApi();
+                let servers = ${serversJson};
+                let activeServerIndex = 0;
+                let showDeleteConfirm = ${showDeleteConfirm};
+                let activeTab = 'general';
+                
+                // 添加消息处理
+                window.addEventListener('message', event => {
+                    const message = event.data;
+                    switch (message.command) {
+                        case 'loadSettings':
+                            servers = message.servers || [];
+                            activeServerIndex = 0;
+                            render();
+                            break;
+                        case 'keyFileSelected':
+                            if (message.index !== undefined && message.path) {
                                 updateServer(message.index, 'privateKeyPath', message.path);
-                                renderServers();
-                                break;
+                                render();
+                            }
+                            break;
+                        case 'deleteConfirmed':
+                            removeServer(message.index);
+                            break;
+                    }
+                });
+                
+                // 删除确认开关
+                document.getElementById('showDeleteConfirmToggle').addEventListener('change', (e) => {
+                    showDeleteConfirm = e.target.checked;
+                    vscode.postMessage({
+                        command: 'updateGeneralSetting',
+                        setting: 'showConfirmDialog',
+                        value: showDeleteConfirm
+                    });
+                });
+                
+                // 选项卡切换
+                document.querySelectorAll('.settings-tab').forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        // 更新选项卡状态
+                        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+                        tab.classList.add('active');
+                        
+                        // 更新面板显示
+                        const tabId = tab.dataset.tab;
+                        activeTab = tabId;
+                        document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.remove('active'));
+                        
+                        if (tabId === 'general') {
+                            document.getElementById('generalSettingsPanel').classList.add('active');
+                        } else if (tabId === 'servers') {
+                            document.getElementById('serversSettingsPanel').classList.add('active');
+                            renderServerNav();
+                            renderServerPanels();
                         }
                     });
-
-                    document.getElementById('addServerBtn').addEventListener('click', addServer);
-                    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-
-                    // 初始化显示
-                    renderServers();
-                    updateEmptyState();
-
-                    function getServerHtml(server, index) {
-                        return \`
-                            <div class="server-item">
+                });
+                
+                // 渲染服务器导航
+                function renderServerNav() {
+                    const serverNav = document.getElementById('serverNav');
+                    serverNav.innerHTML = '';
+                    
+                    servers.forEach((server, index) => {
+                        const li = document.createElement('li');
+                        li.className = 'server-nav-item' + (index === activeServerIndex ? ' active' : '');
+                        li.dataset.index = String(index);
+                        li.innerHTML = \`
+                            <span class="server-nav-item-icon">🖥️</span>
+                            <span class="server-nav-item-name">\${server.name || '${i18n.settings.enterServerName}'}</span>
+                        \`;
+                        li.addEventListener('click', () => {
+                            activeServerIndex = index;
+                            renderServerNav();
+                            renderServerPanels();
+                        });
+                        serverNav.appendChild(li);
+                    });
+                }
+                
+                // 渲染服务器面板
+                function renderServerPanels() {
+                    const serverPanels = document.getElementById('serverPanels');
+                    serverPanels.innerHTML = '';
+                    
+                    if (servers.length > 0) {
+                        const server = servers[activeServerIndex];
+                        const panel = document.createElement('div');
+                        panel.innerHTML = getServerHtml(server, activeServerIndex);
+                        serverPanels.appendChild(panel);
+                        
+                        // 添加事件监听
+                        attachInputListeners();
+                        attachAuthTypeListeners();
+                        attachKeyFileSelectListeners();
+                    }
+                }
+                
+                // 获取服务器HTML
+                function getServerHtml(server, index) {
+                    return \`
+                        <div class="server-item">
+                            <div class="box-section">
+                                <div class="box-header">${i18n.settings.serverName}</div>
                                 <div class="form-group">
-                                    <label>${i18n.settings.serverName}:</label>
-                                    <input type="text" value="\${server.name || ''}" data-index="\${index}" data-field="name" placeholder="输入服务器名称">
+                                    <input type="text" class="server-name-input" style="width: 100%;" value="\${server.name || ''}" data-index="\${index}" data-field="name" placeholder="${i18n.settings.enterServerName}">
                                 </div>
+                            </div>
+                            
+                            <div class="box-section">
+                                <div class="box-header">${i18n.settings.host}</div>
                                 <div class="form-group">
                                     <label>${i18n.settings.host}:</label>
-                                    <input type="text" value="\${server.host || ''}" data-index="\${index}" data-field="host" placeholder="输入主机地址">
+                                    <input type="text" value="\${server.host || ''}" data-index="\${index}" data-field="host" placeholder="${i18n.settings.enterHost}">
                                 </div>
                                 <div class="form-group">
                                     <label>${i18n.settings.port}:</label>
-                                    <input type="number" value="\${server.port || 22}" data-index="\${index}" data-field="port" placeholder="22">
+                                    <input type="number" value="\${server.port || 22}" data-index="\${index}" data-field="port" placeholder="${i18n.settings.enterPort}">
                                 </div>
                                 <div class="form-group">
                                     <label>${i18n.settings.username}:</label>
-                                    <input type="text" value="\${server.username || ''}" data-index="\${index}" data-field="username" placeholder="输入用户名">
+                                    <input type="text" value="\${server.username || ''}" data-index="\${index}" data-field="username" placeholder="${i18n.settings.enterUsername}">
                                 </div>
-                                <div class="form-group">
-                                    <label>${i18n.settings.authType}:</label>
-                                    <select class="auth-type" data-index="\${index}">
-                                        <option value="password" \${!server.privateKeyPath ? 'selected' : ''}>${i18n.settings.authPassword}</option>
-                                        <option value="privateKey" \${server.privateKeyPath ? 'selected' : ''}>${i18n.settings.authPrivateKey}</option>
-                                    </select>
+                            </div>
+                            
+                            <div class="box-section">
+                                <div class="box-header">${i18n.settings.authType}</div>
+                                <div class="auth-options">
+                                    <div class="auth-option \${!server.privateKeyPath ? 'active' : ''}" data-auth="password" data-index="\${index}">
+                                        ${i18n.settings.authPassword}
+                                    </div>
+                                    <div class="auth-option \${server.privateKeyPath ? 'active' : ''}" data-auth="key" data-index="\${index}">
+                                        ${i18n.settings.authPrivateKey}
+                                    </div>
                                 </div>
+                                
                                 <div class="form-group password-group" \${server.privateKeyPath ? 'style="display:none;"' : ''}>
                                     <label>${i18n.settings.password}:</label>
-                                    <input type="password" value="\${server.password || ''}" data-index="\${index}" data-field="password" placeholder="输入密码">
+                                    <input type="password" value="\${server.password || ''}" data-index="\${index}" data-field="password" placeholder="${i18n.settings.enterPassword}">
                                 </div>
+                                
                                 <div class="form-group key-group" \${!server.privateKeyPath ? 'style="display:none;"' : ''}>
                                     <label>${i18n.settings.privateKey}:</label>
-                                    <div class="key-input-group">
-                                        <input type="text" value="\${server.privateKeyPath || ''}" data-index="\${index}" data-field="privateKeyPath" placeholder="选择私钥文件" readonly>
-                                        <button class="select-key-btn" data-index="\${index}">选择文件</button>
-                                    </div>
-                                    <div class="form-group passphrase-group">
-                                        <label>${i18n.settings.passphrase}:</label>
-                                        <input type="password" value="\${server.passphrase || ''}" data-index="\${index}" data-field="passphrase" placeholder="如果私钥需要密码短语，请输入">
+                                    <div class="key-file-selector">
+                                        <input type="text" value="\${server.privateKeyPath || ''}" data-index="\${index}" data-field="privateKeyPath" placeholder="${i18n.settings.enterPrivateKeyPath}">
+                                        <button class="select-key-file-btn" data-index="\${index}">${i18n.settings.selectPrivateKey}</button>
                                     </div>
                                 </div>
+                                <div class="form-group passphrase-group" \${!server.privateKeyPath ? 'style="display:none;"' : ''}>
+                                    <label>${i18n.settings.passphrase}:</label>
+                                    <input type="password" value="\${server.passphrase || ''}" data-index="\${index}" data-field="passphrase" placeholder="${i18n.settings.enterPassphrase}">
+                                </div>
+                            </div>
+                            
+                            <div class="box-section">
+                                <div class="box-header">${i18n.settings.paths}</div>
                                 <div class="form-group">
                                     <label>${i18n.settings.localPath}:</label>
-                                    <input type="text" value="\${server.localPath || ''}" data-index="\${index}" data-field="localPath" placeholder="输入本地工作区目录">
+                                    <input type="text" value="\${server.localPath || ''}" data-index="\${index}" data-field="localPath" placeholder="${i18n.settings.enterLocalPath}">
                                 </div>
                                 <div class="form-group">
                                     <label>${i18n.settings.remotePath}:</label>
-                                    <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="输入远程目录">
-                                </div>
-                                <div class="actions">
-                                    <button class="deleteBtn" data-index="\${index}">删除</button>
+                                    <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="${i18n.settings.enterRemotePath}">
                                 </div>
                             </div>
-                        \`;
-                    }
-
-                    function renderServers() {
-                        const serverList = document.getElementById('serverList');
-                        serverList.innerHTML = servers.map((server, index) => getServerHtml(server, index)).join('');
-
-                        // 重新绑定事件
-                        document.querySelectorAll('.server-item input').forEach(input => {
-                            input.addEventListener('change', (e) => {
-                                const target = e.target;
-                                const index = parseInt(target.dataset.index);
-                                const field = target.dataset.field;
-                                updateServer(index, field, target.value);
+                            <div class="actions">
+                                <button class="delete-btn" data-index="\${index}">
+                                    <span class="button-icon">🗑️</span>
+                                    ${i18n.settings.delete}
+                                </button>
+                            </div>
+                        </div>
+                    \`;
+                }
+                
+                // 绑定认证类型切换监听
+                function attachAuthTypeListeners() {
+                    document.querySelectorAll('.auth-option').forEach(option => {
+                        option.addEventListener('click', function() {
+                            const authType = this.dataset.auth;
+                            const serverIndex = parseInt(this.dataset.index);
+                            
+                            // 更新UI
+                            document.querySelectorAll('.auth-option').forEach(opt => {
+                                opt.classList.remove('active');
+                            });
+                            this.classList.add('active');
+                            
+                            if (authType === 'password') {
+                                document.querySelector('.password-group').style.display = '';
+                                document.querySelector('.key-group').style.display = 'none';
+                                document.querySelector('.passphrase-group').style.display = 'none';
+                                updateServer(serverIndex, 'privateKeyPath', '');
+                                updateServer(serverIndex, 'passphrase', '');
+                            } else {
+                                document.querySelector('.password-group').style.display = 'none';
+                                document.querySelector('.key-group').style.display = '';
+                                document.querySelector('.passphrase-group').style.display = '';
+                                updateServer(serverIndex, 'password', '');
+                            }
+                        });
+                    });
+                }
+                
+                // 绑定密钥文件选择按钮
+                function attachKeyFileSelectListeners() {
+                    document.querySelectorAll('.select-key-file-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const index = parseInt(this.dataset.index);
+                            vscode.postMessage({
+                                command: 'selectKeyFile',
+                                index: index
                             });
                         });
-
-                        // 绑定认证方式切换事件
-                        document.querySelectorAll('.auth-type').forEach(select => {
-                            select.addEventListener('change', (e) => {
-                                const target = e.target;
-                                const index = parseInt(target.dataset.index);
-                                const serverItem = target.closest('.server-item');
-                                const passwordGroup = serverItem.querySelector('.password-group');
-                                const keyGroup = serverItem.querySelector('.key-group');
-
-                                if (target.value === 'password') {
-                                    passwordGroup.style.display = 'block';
-                                    keyGroup.style.display = 'none';
-                                    // 清除密钥相关的值
-                                    updateServer(index, 'privateKeyPath', '');
-                                    updateServer(index, 'passphrase', '');
-                                } else {
-                                    passwordGroup.style.display = 'none';
-                                    keyGroup.style.display = 'block';
-                                    // 清除密码
-                                    updateServer(index, 'password', '');
+                    });
+                }
+                
+                // 绑定输入框监听事件
+                function attachInputListeners() {
+                    document.querySelectorAll('input[data-field]').forEach(input => {
+                        input.addEventListener('change', (e) => {
+                            const field = e.target.dataset.field;
+                            const index = parseInt(e.target.dataset.index);
+                            const value = field === 'port' ? parseInt(e.target.value) : e.target.value;
+                            
+                            updateServer(index, field, value);
+                            // 更新侧边栏的服务器名称
+                            if (field === 'name') {
+                                const navItem = document.querySelector('.server-nav-item[data-index="' + String(index) + '"] .server-nav-item-name');
+                                if (navItem) {
+                                    navItem.textContent = value || '${i18n.settings.enterServerName}';
                                 }
-                            });
+                            }
                         });
-
-                        // 绑定选择密钥文件按钮事件
-                        document.querySelectorAll('.select-key-btn').forEach(btn => {
-                            btn.addEventListener('click', async (e) => {
-                                const index = parseInt(btn.dataset.index);
-                                const serverItem = btn.closest('.server-item');
-                                const keyPathInput = serverItem.querySelector('[data-field="privateKeyPath"]');
-
-                                // 发送消息给 VS Code 来打开文件选择对话框
-                                vscode.postMessage({
-                                    command: 'selectKeyFile',
-                                    index: index
-                                });
-                            });
-                        });
-
-                        document.querySelectorAll('.deleteBtn').forEach(btn => {
-                            btn.addEventListener('click', (e) => {
-                                const index = parseInt(btn.dataset.index);
-                                deleteServer(index);
-                            });
-                        });
-
-                        updateEmptyState();
+                    });
+                }
+                
+                // 更新服务器配置
+                function updateServer(index, field, value) {
+                    servers[index][field] = value;
+                }
+                
+                // 添加服务器
+                function addServer() {
+                    servers.push({
+                        name: '',
+                        host: '',
+                        port: 22,
+                        username: '',
+                        password: '',
+                        localPath: '',
+                        remotePath: '/'
+                    });
+                    activeServerIndex = servers.length - 1; // 选中新添加的服务器
+                    render();
+                }
+                
+                // 删除服务器
+                function removeServer(index) {
+                    servers.splice(index, 1);
+                    if (activeServerIndex >= servers.length) {
+                        activeServerIndex = Math.max(0, servers.length - 1);
                     }
-
-                    function updateEmptyState() {
-                        const emptyState = document.getElementById('emptyState');
-                        const serverList = document.getElementById('serverList');
-                        if (servers.length === 0) {
-                            emptyState.style.display = 'block';
-                            serverList.style.display = 'none';
-                        } else {
-                            emptyState.style.display = 'none';
-                            serverList.style.display = 'block';
-                        }
+                    render();
+                    // 通知后端删除了服务器
+                    vscode.postMessage({
+                        command: 'saveSettings',
+                        servers: servers
+                    });
+                }
+                
+                // 更新空状态显示
+                function updateEmptyState() {
+                    const emptyState = document.getElementById('emptyState');
+                    const serverPanels = document.getElementById('serverPanels');
+                    if (servers.length === 0) {
+                        emptyState.style.display = 'block';
+                        serverPanels.style.display = 'none';
+                    } else {
+                        emptyState.style.display = 'none';
+                        serverPanels.style.display = 'block';
                     }
-
-                    function updateServer(index, field, value) {
-                        servers[index][field] = value;
+                }
+                
+                // 保存设置
+                function saveSettings() {
+                    vscode.postMessage({
+                        command: 'saveSettings',
+                        servers: servers
+                    });
+                }
+                
+                // 主渲染函数
+                function render() {
+                    if (activeTab === 'servers') {
+                        renderServerNav();
+                        renderServerPanels();
                     }
-
-                    function addServer() {
-                        servers.push({
-                            name: '',
-                            host: '',
-                            port: 22,
-                            username: '',
-                            password: '',
-                            localPath: '',
-                            remotePath: '/'
-                        });
-                        renderServers();
-                    }
-
-                    function deleteServer(index) {
-                        servers.splice(index, 1);
-                        renderServers();
-                    }
-
-                    function saveSettings() {
+                    updateEmptyState();
+                }
+                
+                // 修改删除服务器的处理方式
+                document.addEventListener('click', function(e) {
+                    if (e.target.classList.contains('delete-btn') || e.target.parentElement.classList.contains('delete-btn')) {
+                        const targetEl = e.target.classList.contains('delete-btn') ? e.target : e.target.parentElement;
+                        const index = parseInt(targetEl.dataset.index);
+                        // 使用 vscode API 而不是 confirm
                         vscode.postMessage({
-                            command: 'saveSettings',
-                            servers: servers
+                            command: 'confirmDelete',
+                            index: index
                         });
                     }
-                </script>
-            </body>
-            </html>`;
-            
+                });
+                
+                // 初始化设置界面
+                document.getElementById('addServerBtn').addEventListener('click', addServer);
+                document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+                
+                // 初始渲染
+                render();
+            </script>
+        </body>
+        </html>`;
+        
         return htmlContent;
     }
 
     public async handleMessage(message: any) {
-        switch (message.type) {
+        switch (message.command) {
             case 'updateSetting':
                 await vscode.workspace.getConfiguration('sftp-tools').update(
                     message.setting,
@@ -576,10 +1031,10 @@ export class SettingsEditorProvider {
                             throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
                         }
                     }
-                    await this._saveSettings(message.servers);
+                    this.saveServersToFile(message.servers);
                     vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
                     vscode.commands.executeCommand('sftp-tools.refreshServers');
-                    vscode.window.showInformationMessage('设置已保存');
+                    vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
                 } catch (error: any) {
                     vscode.window.showErrorMessage(`保存失败: ${error.message}`);
                 }
@@ -590,7 +1045,7 @@ export class SettingsEditorProvider {
                         canSelectFiles: true,
                         canSelectFolders: false,
                         canSelectMany: false,
-                        title: '选择私钥文件',
+                        title: getLocaleText().settings.selectPrivateKey,
                         filters: {
                             'All files': ['*']
                         }
@@ -615,7 +1070,50 @@ export class SettingsEditorProvider {
                     vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
                 }
                 break;
+            case 'updateGeneralSetting':
+                try {
+                    const config = vscode.workspace.getConfiguration('sftp-tools');
+                    await config.update(message.setting, message.value, vscode.ConfigurationTarget.Global);
+                    vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(`保存失败: ${error.message}`);
+                }
+                break;
+            case 'confirmDelete':
+                const i18n = getLocaleText();
+                const answer = await vscode.window.showWarningMessage(
+                    i18n.settings.deleteConfirm,
+                    i18n.settings.yes,
+                    i18n.settings.no
+                );
+                if (answer === i18n.settings.yes) {
+                    // 用户确认删除，通知 webview
+                    this._view?.webview.postMessage({
+                        command: 'deleteConfirmed',
+                        index: message.index
+                    });
+                }
+                break;
         }
+    }
+
+    // 通知设置页面配置已更新
+    public notifySettingsUpdated(servers: any[]): void {
+        if (this._view) {
+            this._view.webview.postMessage({ 
+                command: 'loadSettings', 
+                servers 
+            });
+        }
+    }
+
+    // 从配置中删除服务器
+    private removeServer(index: number): void {
+        const servers = this.loadServersFromFile();
+        servers.splice(index, 1);
+        this.saveServersToFile(servers);
+        vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
+        vscode.commands.executeCommand('sftp-tools.refreshServers');
     }
 }
 

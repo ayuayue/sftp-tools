@@ -155,19 +155,13 @@
     "configuration": {
       "title": "%configuration.title%",
       "properties": {
-        "sftp-tools.showConfirmDialog": {
-          "type": "boolean",
-          "default": true,
-          "description": "%configuration.showConfirmDialog.description%",
-          "markdownDescription": "%configuration.showConfirmDialog.markdownDescription%"
-        },
         "sftp-tools.servers": {
           "type": "array",
-          "default": [],
           "description": "%configuration.servers.description%",
+          "scope": "resource",
           "items": {
             "type": "object",
-            "required": ["name", "host", "username", "remotePath"],
+            "required": ["name", "host", "username"],
             "properties": {
               "name": {
                 "type": "string",
@@ -203,7 +197,15 @@
                 "description": "%configuration.servers.remotePath.description%"
               }
             }
-          }
+          },
+          "default": []
+        },
+        "sftp-tools.showConfirmDialog": {
+          "type": "boolean",
+          "scope": "resource",
+          "description": "%configuration.showConfirmDialog.description%",
+          "markdownDescription": "%configuration.showConfirmDialog.markdownDescription%",
+          "default": true
         }
       }
     },

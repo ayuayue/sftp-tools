@@ -33,5 +33,7 @@
     "configuration.servers.remotePath.description": "Remote path",
     "commands.uploadDirectory": "Upload Directory",
     "commands.uploadDirectoryToServer": "Upload Directory to Other Server...",
-    "commands.uploadDirectoryToAllServers": "Upload Directory to All Servers"
+    "commands.uploadDirectoryToAllServers": "Upload Directory to All Servers",
+    "configuration.useGlobalConfig.description": "Use global configuration instead of workspace configuration",
+    "configuration.useGlobalConfig.markdownDescription": "When enabled, all workspaces will use the same global SFTP server configurations. Otherwise, each workspace has its own server configurations."
 } 

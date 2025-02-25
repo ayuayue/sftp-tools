@@ -7,6 +7,10 @@ const zh = {
     },
     settings: {
         title: 'SFTP 设置',
+        generalSettings: '通用设置',
+        serverSettings: '服务器设置',
+        showDeleteConfirm: '删除前确认',
+        showDeleteConfirmDesc: '删除远程文件或文件夹前是否显示确认对话框',
         serverName: '服务器名称',
         serverNameRequired: '服务器名称不能为空',
         serverNameExists: '服务器名称已存在',
@@ -20,6 +24,7 @@ const zh = {
         needPassphrase: '私钥文件是否需要密码短语？',
         enterPassphrase: '输入私钥密码短语',
         enterRemotePath: '输入远程路径',
+        enterLocalPath: '输入本地工作区目录,/ 为当前工作区',
         host: '主机地址',
         port: '端口',
         username: '用户名',
@@ -28,6 +33,7 @@ const zh = {
         passphrase: '密码短语',
         remotePath: '远程目录',
         localPath: '本地工作区目录',
+        paths: '路径设置',
         authType: '认证方式',
         authPassword: '密码认证',
         authPrivateKey: '密钥文件',
@@ -35,11 +41,15 @@ const zh = {
         saveAll: '保存全部',
         emptyTip: '还没有配置任何服务器',
         deleteConfirm: '确定要删除吗？',
+        delete: '删除',
         yes: '是',
         no: '否',
         clickAddServerTip: '点击右上角 添加服务器 按钮开始配置',
         clickSaveAllTip: '配置完成后点击 保存全部 按钮保存更改',
-        configureNow: '配置服务器'
+        configureNow: '配置服务器',
+        useGlobalConfig: '使用全局配置',
+        useGlobalConfigDesc: '启用后，所有工作区将使用相同的服务器配置；禁用后，每个工作区有独立配置',
+        enterPrivateKeyPath: '输入或选择私钥文件路径'
     },
     status: {
         uploading: '正在上传...',
@@ -59,7 +69,8 @@ const zh = {
         uploadDirectorySuccess: '目录上传成功',
         directoryDeleted: '目录已删除',
         fileDeleted: '文件已删除',
-        uploadingToServer: '正在上传到 {0}'
+        uploadingToServer: '正在上传到 {0}',
+        settingsSaved: '设置已保存'
     },
     messages: {
         confirmDelete: '确定要删除{0}吗？',
@@ -78,7 +89,8 @@ const zh = {
         serverDisconnected: '已断开与 {0} 的连接',
         autoInputPasswordPrompt: '是否自动输入保存的密码？',
         sshConnectionFailed: 'SSH 连接失败: {0}',
-        noServer: '没有连接到服务器'
+        noServer: '没有连接到服务器',
+        settingsSaveFailed: '保存失败: 无法写入配置文件'
     }
 };
 
@@ -89,6 +101,10 @@ const en = {
     },
     settings: {
         title: 'SFTP Settings',
+        generalSettings: 'General Settings',
+        serverSettings: 'Server Settings',
+        showDeleteConfirm: 'Confirm before delete',
+        showDeleteConfirmDesc: 'Show confirmation dialog before deleting remote files or folders',
         serverName: 'Server Name',
         serverNameRequired: 'Server name is required',
         serverNameExists: 'Server name already exists',
@@ -102,6 +118,7 @@ const en = {
         needPassphrase: 'Does the private key require a passphrase?',
         enterPassphrase: 'Enter private key passphrase',
         enterRemotePath: 'Enter remote path',
+        enterLocalPath: 'Enter local workspace path, / is the current workspace',
         host: 'Host',
         port: 'Port',
         username: 'Username',
@@ -110,6 +127,7 @@ const en = {
         passphrase: 'Passphrase',
         remotePath: 'Remote Path',
         localPath: 'Local Workspace Path',
+        paths: 'Path Settings',
         authType: 'Authentication Type',
         authPassword: 'Password',
         authPrivateKey: 'Private Key',
@@ -117,11 +135,15 @@ const en = {
         saveAll: 'Save All',
         emptyTip: 'No servers configured yet',
         deleteConfirm: 'Are you sure you want to delete?',
+        delete: 'Delete',
         yes: 'Yes',
         no: 'No',
         clickAddServerTip: 'Click the Add Server button in the top right to start configuring',
         clickSaveAllTip: 'Click Save All button to save changes after configuration',
-        configureNow: 'Configure Server'
+        configureNow: 'Configure Server',
+        useGlobalConfig: 'Use global configuration',
+        useGlobalConfigDesc: 'When enabled, all workspaces will use the same server configurations; when disabled, each workspace has its own configuration',
+        enterPrivateKeyPath: 'Enter or select private key file path'
     },
     status: {
         uploading: 'Uploading...',
@@ -141,7 +163,8 @@ const en = {
         uploadDirectorySuccess: 'Directory upload successful',
         directoryDeleted: 'Directory deleted',
         fileDeleted: 'File deleted',
-        uploadingToServer: 'Uploading to {0}'
+        uploadingToServer: 'Uploading to {0}',
+        settingsSaved: 'Settings saved'
     },
     messages: {
         confirmDelete: 'Are you sure you want to delete {0}?',
@@ -160,7 +183,8 @@ const en = {
         serverDisconnected: 'Disconnected from {0}',
         autoInputPasswordPrompt: 'Do you want to auto-input the saved password?',
         sshConnectionFailed: 'SSH connection failed: {0}',
-        noServer: 'No server connected'
+        noServer: 'No server connected',
+        settingsSaveFailed: 'Save failed: Cannot write to configuration file'
     }
 };
 

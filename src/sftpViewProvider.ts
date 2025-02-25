@@ -18,18 +18,81 @@ interface ServerConfig {
     remotePath: string;
 }
 
+// 配置文件名
+const CONFIG_FILE_NAME = 'sftp-tools.json';
+
 export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<ServerItem | undefined | null | void> = new vscode.EventEmitter<ServerItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<ServerItem | undefined | null | void> = this._onDidChangeTreeData.event;
     private activeServer?: string;  // 添加激活服务器标记
+    private configFilePath: string = '';
+    private fileWatcher?: vscode.FileSystemWatcher;
 
     constructor() {
-        // 监听配置变化
-        vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('sftp-tools.servers')) {
-                this.refresh();
+        this.initConfigFilePath();
+        // 监听配置文件变化
+        this.watchConfigFile();
+    }
+
+    private initConfigFilePath() {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (workspaceFolder) {
+            const vscodePath = path.join(workspaceFolder.uri.fsPath, '.vscode');
+            this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
+        }
+    }
+
+    private watchConfigFile() {
+        // 清除之前的监听
+        if (this.fileWatcher) {
+            this.fileWatcher.dispose();
+        }
+
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (workspaceFolder) {
+            // 监听配置文件变化
+            const pattern = new vscode.RelativePattern(
+                path.join(workspaceFolder.uri.fsPath, '.vscode'), 
+                CONFIG_FILE_NAME
+            );
+            this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+            this.fileWatcher.onDidChange(() => this.refresh());
+            this.fileWatcher.onDidCreate(() => this.refresh());
+            this.fileWatcher.onDidDelete(() => this.refresh());
+        }
+    }
+
+    // 从文件加载服务器配置
+    private loadServersFromFile(): ServerConfig[] {
+        try {
+            if (this.configFilePath && fs.existsSync(this.configFilePath)) {
+                const configContent = fs.readFileSync(this.configFilePath, 'utf8');
+                return JSON.parse(configContent).servers || [];
             }
-        });
+        } catch (error) {
+            console.error('Failed to load configuration:', error);
+        }
+        return [];
+    }
+
+    // 将服务器配置保存到文件
+    private saveServersToFile(servers: ServerConfig[]): boolean {
+        try {
+            if (this.configFilePath) {
+                // 确保 .vscode 目录存在
+                const vscodePath = path.dirname(this.configFilePath);
+                if (!fs.existsSync(vscodePath)) {
+                    fs.mkdirSync(vscodePath, { recursive: true });
+                }
+                
+                const configData = { servers };
+                fs.writeFileSync(this.configFilePath, JSON.stringify(configData, null, 2), 'utf8');
+                return true;
+            }
+        } catch (error) {
+            console.error('Failed to save configuration:', error);
+        }
+        return false;
     }
 
     refresh(): void {
@@ -42,8 +105,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
 
     getChildren(element?: ServerItem): Thenable<ServerItem[]> {
         if (!element) {
-            const config = vscode.workspace.getConfiguration('sftp-tools');
-            const servers: ServerConfig[] = config.get('servers') || [];
+            const servers: ServerConfig[] = this.loadServersFromFile();
             return Promise.resolve(
                 servers.map(server => new ServerItem(
                     server.name,
@@ -58,8 +120,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
     }
 
     async addServer() {
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const servers: ServerConfig[] = config.get('servers') || [];
+        const servers: ServerConfig[] = this.loadServersFromFile();
         const i18n = getLocaleText();
 
         // 验证服务器名称
@@ -161,7 +222,8 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
             remotePath
         });
 
-        await config.update('servers', servers, vscode.ConfigurationTarget.Global);
+        this.saveServersToFile(servers);
+        this.refresh();
     }
 
     async editServer(serverItem: ServerItem) {
@@ -200,10 +262,13 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
             return;
         }
 
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const servers: ServerConfig[] = config.get('servers') || [];
+        const servers: ServerConfig[] = this.loadServersFromFile();
         const newServers = servers.filter(s => s.name !== serverItem.label);
-        await config.update('servers', newServers, vscode.ConfigurationTarget.Global);
+        this.saveServersToFile(newServers);
+        this.refresh();
+        
+        // 通知设置页面（如果已打开）
+        vscode.commands.executeCommand('sftp-tools.settingsUpdated', newServers);
     }
 
     // 添加设置激活服务器的方法
@@ -739,39 +804,41 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     }
     
     async deleteRemoteFile(item: ExplorerItem) {
-        const i18n = getLocaleText();
         const config = vscode.workspace.getConfiguration('sftp-tools');
-        const showConfirm = config.get('showConfirmDialog', true);
-
-        if (showConfirm) {
-            const answer = await vscode.window.showWarningMessage(
-                i18n.messages.confirmDelete.replace('{0}', `${item.isDirectory ? '目录' : '文件'} ${item.path}`),
-                i18n.settings.yes,
-                i18n.settings.no
+        const showConfirmDialog = config.get('showConfirmDialog', true);
+        
+        let shouldDelete = true;
+        if (showConfirmDialog) {
+            const result = await vscode.window.showWarningMessage(
+                getLocaleText().messages.confirmDelete.replace('{0}', path.basename(item.path)),
+                getLocaleText().settings.yes,
+                getLocaleText().settings.no
             );
-            if (answer !== i18n.settings.yes) {
-                return;
-            }
+            shouldDelete = (result === getLocaleText().settings.yes);
         }
-
+        
+        if (!shouldDelete) {
+            return;
+        }
+        
         try {
             this.setOperationStatus(true);
             if (!this.currentServer) {
-                throw new Error(i18n.messages.noServer);
+                throw new Error(getLocaleText().messages.noServer);
             }
 
             if (item.isDirectory) {
                 await this.sftpManager.rmdir(item.path, true);
-                this.log(`[${this.currentServer.name}] ${i18n.status.directoryDeleted}: ${item.path}`, 'info');
+                this.log(`[${this.currentServer.name}] ${getLocaleText().status.directoryDeleted}: ${item.path}`, 'info');
             } else {
                 await this.sftpManager.deleteFile(item.path);
-                this.log(`[${this.currentServer.name}] ${i18n.status.fileDeleted}: ${item.path}`, 'info');
+                this.log(`[${this.currentServer.name}] ${getLocaleText().status.fileDeleted}: ${item.path}`, 'info');
             }
 
             this.refresh();
         } catch (error: any) {
-            this.log(`[${this.currentServer?.name}] ${i18n.messages.operationFailed.replace('{0}', error.message)}`, 'error');
-            vscode.window.showErrorMessage(i18n.messages.operationFailed.replace('{0}', error.message));
+            this.log(`[${this.currentServer?.name}] ${getLocaleText().messages.operationFailed.replace('{0}', error.message)}`, 'error');
+            vscode.window.showErrorMessage(getLocaleText().messages.operationFailed.replace('{0}', error.message));
         } finally {
             this.setOperationStatus(false);
         }

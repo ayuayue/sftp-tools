@@ -33,5 +33,7 @@
     "configuration.servers.remotePath.description": "远程路径",
     "commands.uploadDirectory": "上传目录",
     "commands.uploadDirectoryToServer": "上传目录到其他服务器...",
-    "commands.uploadDirectoryToAllServers": "上传目录到所有服务器"
+    "commands.uploadDirectoryToAllServers": "上传目录到所有服务器",
+    "configuration.useGlobalConfig.description": "使用全局配置而不是工作区配置",
+    "configuration.useGlobalConfig.markdownDescription": "启用后，所有工作区将使用相同的全局 SFTP 服务器配置。否则，每个工作区都有自己的服务器配置。"
 } 

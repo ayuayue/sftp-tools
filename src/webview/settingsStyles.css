@@ -1,0 +1,110 @@
+:root {
+    --container-padding: 20px;
+    --input-padding-vertical: 6px;
+    --input-padding-horizontal: 12px;
+}
+
+body, html {
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    font-family: var(--vscode-font-family);
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-foreground);
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* 头部样式 */
+.header {
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--vscode-sideBar-background);
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+/* 设置选项卡样式 */
+.settings-tab-bar {
+    display: flex;
+    background-color: var(--vscode-sideBar-background);
+    border-bottom: 1px solid var(--vscode-panel-border);
+    overflow-x: auto;
+}
+
+.settings-tab {
+    padding: 8px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    color: var(--vscode-foreground);
+    opacity: 0.8;
+    transition: all 0.2s ease;
+}
+
+.settings-tab:hover {
+    opacity: 1;
+}
+
+.settings-tab.active {
+    border-bottom-color: var(--vscode-activityBar-activeBorder);
+    opacity: 1;
+    font-weight: 500;
+}
+
+/* 面板样式 */
+.settings-panel {
+    display: none;
+    padding: 20px;
+    width: 100%;
+}
+
+.settings-panel.active {
+    display: block;
+}
+
+/* 侧边栏样式 */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 250px;
+    background-color: var(--vscode-sideBar-background);
+    border-right: 1px solid var(--vscode-panel-border);
+}
+
+/* 服务器设置面板特殊样式 */
+#serversSettingsPanel.active {
+    display: flex;
+    padding: 0;
+}
+
+/* 通用设置面板样式 */
+#generalSettingsPanel {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: var(--vscode-editor-background);
+}
+
+/* 修复服务器名称输入框样式 */
+.server-name-input {
+    width: 100%;
+    display: block;
+    margin-bottom: 0;
+}
+
+/* 确保两个面板完全分离 */
+#generalSettingsPanel,
+#serversSettingsPanel {
+    height: 100%;
+    overflow: auto;
+}
+
+/* 其他样式... */ 
