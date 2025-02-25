@@ -3,7 +3,7 @@
   "displayName": "SFTP Tools",
   "description": "A powerful SFTP/FTP client for VS Code with an intuitive interface",
   "publisher": "caoayu",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": {
     "name": "caoayu",
     "email": "caoayu80@gmail.com"
@@ -48,37 +48,37 @@
     "commands": [
       {
         "command": "sftp-tools.showInfo",
-        "title": "SFTP Tools: Show Configuration Info",
+        "title": "%commands.showInfo%",
         "icon": "$(info)"
       },
       {
         "command": "sftp-tools.addServer",
-        "title": "Add Server",
+        "title": "%commands.addServer%",
         "icon": "$(add)"
       },
       {
         "command": "sftp-tools.editServer",
-        "title": "Edit Server",
+        "title": "%commands.editServer%",
         "icon": "$(edit)"
       },
       {
         "command": "sftp-tools.deleteServer",
-        "title": "Delete Server",
+        "title": "%commands.deleteServer%",
         "icon": "$(trash)"
       },
       {
         "command": "sftp-tools.openSettings",
-        "title": "Open Settings",
+        "title": "%commands.openSettings%",
         "icon": "$(gear)"
       },
       {
         "command": "sftp-tools.openSettingsEditor",
-        "title": "Open Settings Editor",
+        "title": "%commands.openSettingsEditor%",
         "icon": "$(gear)"
       },
       {
         "command": "sftp-tools.refreshServers",
-        "title": "Refresh Servers",
+        "title": "%commands.refreshServers%",
         "icon": "$(refresh)"
       },
       {
@@ -88,7 +88,7 @@
       },
       {
         "command": "sftp-tools.uploadFile",
-        "title": "上传到当前服务器",
+        "title": "%commands.uploadFile%",
         "icon": "$(cloud-upload)"
       },
       {
@@ -97,85 +97,85 @@
       },
       {
         "command": "sftp-tools.uploadToServer",
-        "title": "上传到其他服务器...",
+        "title": "%commands.uploadToServer%",
         "icon": "$(cloud-upload)"
       },
       {
         "command": "sftp-tools.disconnectServer",
-        "title": "Disconnect Server",
+        "title": "%commands.disconnectServer%",
         "icon": "$(debug-disconnect)"
       },
       {
         "command": "sftp-tools.uploadToAllServers",
-        "title": "上传到所有服务器",
+        "title": "%commands.uploadToAllServers%",
         "icon": "$(cloud-upload)"
       },
       {
         "command": "sftp-tools.deleteRemoteFile",
-        "title": "Delete Remote File",
+        "title": "%commands.deleteRemoteFile%",
         "icon": "$(trash)"
       },
       {
         "command": "sftp-tools.downloadRemoteFile",
-        "title": "Download Remote File",
+        "title": "%commands.downloadRemoteFile%",
         "icon": "$(cloud-download)"
       },
       {
         "command": "sftp-tools.cancelOperations",
-        "title": "取消操作",
+        "title": "%commands.cancelOperations%",
         "icon": "$(stop-circle)",
         "category": "SFTP Tools"
       }
     ],
     "configuration": {
-      "title": "SFTP Tools",
+      "title": "%configuration.title%",
       "properties": {
         "sftp-tools.showConfirmDialog": {
           "type": "boolean",
           "default": true,
-          "description": "删除文件时是否显示确认对话框",
-          "markdownDescription": "删除文件或目录时是否显示确认对话框。\n- `true`: 删除前显示确认对话框\n- `false`: 直接删除，不显示确认"
+          "description": "%configuration.showConfirmDialog.description%",
+          "markdownDescription": "%configuration.showConfirmDialog.markdownDescription%"
         },
         "sftp-tools.servers": {
           "type": "array",
           "default": [],
-          "description": "SFTP server configurations",
+          "description": "%configuration.servers.description%",
           "items": {
             "type": "object",
             "required": ["name", "host", "username", "remotePath"],
             "properties": {
               "name": {
                 "type": "string",
-                "description": "Server name"
+                "description": "%configuration.servers.name.description%"
               },
               "host": {
                 "type": "string",
-                "description": "Server host"
+                "description": "%configuration.servers.host.description%"
               },
               "port": {
                 "type": "number",
                 "default": 22,
-                "description": "Server port"
+                "description": "%configuration.servers.port.description%"
               },
               "username": {
                 "type": "string",
-                "description": "Username"
+                "description": "%configuration.servers.username.description%"
               },
               "password": {
                 "type": "string",
-                "description": "Password"
+                "description": "%configuration.servers.password.description%"
               },
               "privateKeyPath": {
                 "type": "string",
-                "description": "私钥文件路径"
+                "description": "%configuration.servers.privateKeyPath.description%"
               },
               "passphrase": {
                 "type": "string",
-                "description": "私钥密码短语"
+                "description": "%configuration.servers.passphrase.description%"
               },
               "remotePath": {
                 "type": "string",
-                "description": "Remote path"
+                "description": "%configuration.servers.remotePath.description%"
               }
             }
           }
@@ -258,19 +258,19 @@
       "sftp-tools.uploadSubmenu": [
         {
           "command": "sftp-tools.uploadFile",
-          "title": "上传到当前服务器",
+          "title": "%commands.uploadFile%",
           "when": "resourceScheme == file",
           "group": "upload@1"
         },
         {
           "command": "sftp-tools.uploadToServer",
-          "title": "上传到其他服务器...",
+          "title": "%commands.uploadToServer%",
           "when": "resourceScheme == file",
           "group": "upload@2"
         },
         {
           "command": "sftp-tools.uploadToAllServers",
-          "title": "上传到所有服务器",
+          "title": "%commands.uploadToAllServers%",
           "when": "resourceScheme == file",
           "group": "upload@3"
         }
@@ -301,14 +301,14 @@
       "sftp-tools": [
         {
           "id": "sftp-tools-servers",
-          "name": "SFTP 服务器",
+          "name": "%views.servers.title%",
           "type": "tree",
           "icon": "resources/server.svg",
-          "contextualTitle": "SFTP 服务器"
+          "contextualTitle": "%views.servers.title%"
         },
         {
           "id": "sftp-tools-explorer",
-          "name": "Explorer",
+          "name": "%views.explorer.title%",
           "type": "tree"
         }
       ]
@@ -316,7 +316,17 @@
     "submenus": [
       {
         "id": "sftp-tools.uploadSubmenu",
-        "label": "SFTP-Tools Upload"
+        "label": "%menus.uploadSubmenu%"
+      }
+    ],
+    "l10n": [
+      {
+        "id": "zh-cn",
+        "path": "./l10n/bundle.l10n.json"
+      },
+      {
+        "id": "en",
+        "path": "./package.nls.json"
       }
     ]
   },

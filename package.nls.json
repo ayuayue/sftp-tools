@@ -1,0 +1,21 @@
+{
+    "views.servers.title": "SFTP Servers",
+    "views.explorer.title": "File Explorer",
+    "commands.showInfo": "Show Configuration Info",
+    "commands.addServer": "Add Server",
+    "commands.editServer": "Edit Server",
+    "commands.deleteServer": "Delete Server",
+    "commands.openSettings": "Open Settings",
+    "commands.openSettingsEditor": "Open Settings Editor",
+    "commands.refreshServers": "Refresh Servers",
+    "commands.refreshExplorer": "Refresh Explorer",
+    "commands.uploadFile": "Upload to Current Server",
+    "commands.uploadToServer": "Upload to Other Server...",
+    "commands.uploadToAllServers": "Upload to All Servers",
+    "commands.deleteRemoteFile": "Delete Remote File",
+    "commands.downloadRemoteFile": "Download Remote File",
+    "commands.cancelOperations": "Cancel Operations",
+    "commands.disconnectServer": "Disconnect Server",
+    "menus.uploadSubmenu": "SFTP Upload",
+    "configuration.title": "SFTP Tools"
+} 

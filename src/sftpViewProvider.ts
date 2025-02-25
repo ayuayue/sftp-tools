@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { time } from 'console';
 import { StatusBarManager } from './statusBarManager';
+import { getLocaleText } from './i18n';
 
 interface ServerConfig {
     name: string;
@@ -59,43 +60,48 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
     async addServer() {
         const config = vscode.workspace.getConfiguration('sftp-tools');
         const servers: ServerConfig[] = config.get('servers') || [];
+        const i18n = getLocaleText();
 
         // 验证服务器名称
         const validateServerName = (name: string): string | undefined => {
             if (!name) {
-                return '服务器名称不能为空';
+                return i18n.settings.serverNameRequired;
             }
             if (servers.some(s => s.name === name)) {
-                return '服务器名称已存在';
+                return i18n.settings.serverNameExists;
             }
             return undefined;
         };
 
         const name = await vscode.window.showInputBox({
-            prompt: '输入服务器名称',
+            prompt: i18n.settings.enterServerName,
             validateInput: validateServerName
         });
         if (!name) { return; }
 
-        const host = await vscode.window.showInputBox({ prompt: '输入主机地址' });
+        const host = await vscode.window.showInputBox({ 
+            prompt: i18n.settings.enterHost
+        });
         if (!host) { return; }
 
         const port = await vscode.window.showInputBox({ 
-            prompt: '输入端口',
+            prompt: i18n.settings.enterPort,
             value: '22'
         });
         if (!port) { return; }
 
-        const username = await vscode.window.showInputBox({ prompt: '输入用户名' });
+        const username = await vscode.window.showInputBox({ 
+            prompt: i18n.settings.enterUsername
+        });
         if (!username) { return; }
 
         // 选择认证方式
         const authType = await vscode.window.showQuickPick(
             [
-                { label: '密码认证', value: 'password' },
-                { label: '密钥文件', value: 'privateKey' }
+                { label: i18n.settings.authPassword, value: 'password' },
+                { label: i18n.settings.authPrivateKey, value: 'privateKey' }
             ],
-            { placeHolder: '选择认证方式' }
+            { placeHolder: i18n.settings.selectAuthType }
         );
         if (!authType) { return; }
 
@@ -105,7 +111,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
 
         if (authType.value === 'password') {
             password = await vscode.window.showInputBox({ 
-                prompt: '输入密码',
+                prompt: i18n.settings.enterPassword,
                 password: true
             });
             if (!password) { return; }
@@ -114,7 +120,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
                 canSelectFiles: true,
                 canSelectFolders: false,
                 canSelectMany: false,
-                title: '选择私钥文件',
+                title: i18n.settings.selectPrivateKey,
                 filters: {
                     'All files': ['*']
                 }
@@ -124,14 +130,14 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
 
             // 询问是否需要密码短语
             const needPassphrase = await vscode.window.showQuickPick(
-                ['是', '否'],
-                { placeHolder: '私钥文件是否需要密码短语？' }
+                [i18n.settings.yes, i18n.settings.no],
+                { placeHolder: i18n.settings.needPassphrase }
             );
             if (!needPassphrase) { return; }
 
-            if (needPassphrase === '是') {
+            if (needPassphrase === i18n.settings.yes) {
                 passphrase = await vscode.window.showInputBox({
-                    prompt: '输入私钥密码短语',
+                    prompt: i18n.settings.enterPassphrase,
                     password: true
                 });
                 if (!passphrase) { return; }
@@ -139,7 +145,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
         }
 
         const remotePath = await vscode.window.showInputBox({ 
-            prompt: '输入远程路径',
+            prompt: i18n.settings.enterRemotePath,
             value: '/'
         });
         if (!remotePath) { return; }
@@ -255,6 +261,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     private serversProvider: SftpServersProvider;  // 添加引用
     private statusBar: StatusBarManager = StatusBarManager.getInstance();
     private hasActiveOperations: boolean = false;
+    private i18n = getLocaleText();
 
     constructor(serversProvider: SftpServersProvider) {  // 通过构造函数注入
         this.serversProvider = serversProvider;
@@ -306,12 +313,14 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
 
     async connectToServer(server: ServerConfig) {
         try {
+            this.statusBar.showProgress(this.i18n.status.connecting);
             await this.sftpManager.connect(server);
             this.currentServer = server;
             this.serversProvider.setActiveServer(server.name);
             this.refresh();
+            this.statusBar.showMessage(this.i18n.status.connected, 'info');
         } catch (error: any) {
-            vscode.window.showErrorMessage(`Failed to connect: ${error.message}`);
+            vscode.window.showErrorMessage(this.i18n.messages.operationFailed.replace('{0}', error.message));
         }
     }
 
@@ -321,7 +330,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             this.currentServer = undefined;
             this.serversProvider.setActiveServer('');
             this.refresh();
-            this.log('Disconnected from server', 'info');
+            this.log(this.i18n.status.disconnected, 'info');
         }
     }
 
@@ -467,7 +476,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             }
 
             const serverDisplay = this.getServerDisplayName(fileInfo.serverConfig);
-            this.statusBar.showProgress(`正在上传到 [${serverDisplay}]...`);
+            this.statusBar.showProgress(this.i18n.status.uploading);
             this.log(`[${this.currentServer?.name}] 开始上传文件:
 本地路径: ${localPath}
 远程路径: ${fileInfo.remotePath}`, 'info');
@@ -524,8 +533,8 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     // 上传到指定服务器
     async uploadToServer(document: vscode.TextDocument, serverConfig: ServerConfig) {
         try {
-            this.statusBar.showProgress(`正在上传到 [${serverConfig.name}]...`);
-            this.log(`[${serverConfig.name}] Uploading local file to remote server`, 'info');
+            this.statusBar.showProgress(this.i18n.status.uploading);
+            this.log(`[${serverConfig.name}] ${this.i18n.status.uploading}`, 'info');
 
             // 连接到指定服务器
             const tempManager = new SftpManager();
@@ -535,13 +544,11 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             const fileInfo = this.remoteFiles.get(document.uri.toString());
             
             if (fileInfo) {
-                // 如果是远程文件，使用原始远程路径
                 relativePath = fileInfo.remotePath;
             } else {
-                // 获取工作区相对路径
                 const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
                 if (!workspaceFolder) {
-                    throw new Error('No workspace folder found');
+                    throw new Error(this.i18n.status.noWorkspace);
                 }
                 
                 relativePath = path.join(
@@ -554,15 +561,15 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             const remoteDir = path.dirname(relativePath);
             try {
                 await tempManager.mkdir(remoteDir, true);
+                this.log(`[${serverConfig.name}] ${this.i18n.status.directoryCreated}: ${remoteDir}`, 'info');
             } catch (err: any) {
-                this.log(`[${serverConfig.name}] Failed to create directory: ${err.message}`, 'warning');
+                this.log(`[${serverConfig.name}] ${this.i18n.status.directoryCreateFailed}: ${err.message}`, 'warning');
             }
 
-            // 上传文件
             await tempManager.writeFile(relativePath, document.getText());
             
-            this.log(`[${serverConfig.name}] File uploaded successfully to ${relativePath}`, 'info');
-            this.statusBar.showMessage(`文件已上传到 [${serverConfig.name}]`, 'info');
+            this.log(`[${serverConfig.name}] ${this.i18n.status.uploadSuccess}: ${relativePath}`, 'info');
+            this.statusBar.showMessage(this.i18n.status.uploadSuccess, 'info');
 
             // 断开连接
             tempManager.disconnect();
@@ -580,17 +587,16 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     async uploadToAllServers(document: vscode.TextDocument) {
         const servers = this.getServers();
         if (servers.length === 0) {
-            vscode.window.showInformationMessage('No servers configured');
+            vscode.window.showInformationMessage(this.i18n.messages.noServersConfigured);
             return;
         }
 
         let successCount = 0;
         let failCount = 0;
 
-        // 显示进度
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: "Uploading to all servers",
+            title: this.i18n.status.uploading,
             cancellable: false
         }, async (progress) => {
             const total = servers.length;
@@ -598,7 +604,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             for (let i = 0; i < servers.length; i++) {
                 const server = servers[i];
                 progress.report({ 
-                    message: `Uploading to ${server.name} (${i + 1}/${total})`,
+                    message: `${this.i18n.status.uploading} ${server.name} (${i + 1}/${total})`,
                     increment: (100 / total)
                 });
 
@@ -607,17 +613,16 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
                     successCount++;
                 } catch (error: any) {
                     failCount++;
-                    this.log(`Failed to upload to ${server.name}: ${error.message}`, 'error');
+                    this.log(this.i18n.messages.operationFailed.replace('{0}', `${server.name}: ${error.message}`), 'error');
                 }
             }
         });
 
-        // 显示结果
         if (failCount === 0) {
-            vscode.window.showInformationMessage(`Successfully uploaded to ${successCount} servers`);
+            vscode.window.showInformationMessage(this.i18n.messages.uploadComplete);
         } else {
             vscode.window.showWarningMessage(
-                `Upload completed with ${successCount} successes and ${failCount} failures. Check output for details.`
+                this.i18n.messages.uploadPartialSuccess.replace('{0}', successCount.toString()).replace('{1}', failCount.toString())
             );
         }
     }
@@ -630,7 +635,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             }
 
             this.log(`[${this.currentServer.name}] 开始下载文件: ${item.path}`, 'info');
-            this.statusBar.showProgress(`正在下载文件...`);
+            this.statusBar.showProgress(this.i18n.status.downloading);
 
             // 获取文件内容
             const content = await this.sftpManager.readFile(item.path);

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ServerItem } from './sftpViewProvider';
 import path from 'path';
+import { getLocaleText } from './i18n';
 
 declare global {
     interface Window {
@@ -173,6 +174,7 @@ export class SettingsEditorProvider {
     }
 
     public _getHtmlForWebview(): string {
+        const i18n = getLocaleText();
         const nonce = getNonce();
         const config = vscode.workspace.getConfiguration('sftp-tools');
         const servers = config.get('servers') || [];
@@ -184,7 +186,7 @@ export class SettingsEditorProvider {
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-                <title>SFTP Settings</title>
+                <title>${i18n.settings.title}</title>
                 <style>
                     body { 
                         padding: 20px; 
@@ -349,9 +351,9 @@ export class SettingsEditorProvider {
                     </button>
                     <div id="serverList" class="server-list"></div>
                     <div id="emptyState" class="empty-state">
-                        <div class="empty-state-text">还没有配置任何服务器</div>
+                        <div class="empty-state-text">${i18n.settings.emptyTip}</div>
                         <div class="empty-state-tip">
-                            点击右上角 <span class="highlight">添加服务器</span> 按钮开始配置
+                            ${i18n.settings.clickAddServerTip}
                         </div>
                         <div class="empty-state-tip">
                             配置完成后点击 <span class="highlight">保存全部</span> 按钮保存更改
@@ -359,7 +361,7 @@ export class SettingsEditorProvider {
                     </div>
                 </div>
                 <div class="global-actions" id="globalActions">
-                    <button id="saveSettingsBtn">保存全部</button>
+                    <button id="saveSettingsBtn">${i18n.settings.saveAll}</button>
                 </div>
                 <script nonce="${nonce}">
                     const vscode = acquireVsCodeApi();
@@ -392,49 +394,49 @@ export class SettingsEditorProvider {
                         return \`
                             <div class="server-item">
                                 <div class="form-group">
-                                    <label>服务器名称:</label>
+                                    <label>${i18n.settings.serverName}:</label>
                                     <input type="text" value="\${server.name || ''}" data-index="\${index}" data-field="name" placeholder="输入服务器名称">
                                 </div>
                                 <div class="form-group">
-                                    <label>主机地址:</label>
+                                    <label>${i18n.settings.host}:</label>
                                     <input type="text" value="\${server.host || ''}" data-index="\${index}" data-field="host" placeholder="输入主机地址">
                                 </div>
                                 <div class="form-group">
-                                    <label>端口:</label>
+                                    <label>${i18n.settings.port}:</label>
                                     <input type="number" value="\${server.port || 22}" data-index="\${index}" data-field="port" placeholder="22">
                                 </div>
                                 <div class="form-group">
-                                    <label>用户名:</label>
+                                    <label>${i18n.settings.username}:</label>
                                     <input type="text" value="\${server.username || ''}" data-index="\${index}" data-field="username" placeholder="输入用户名">
                                 </div>
                                 <div class="form-group">
-                                    <label>认证方式:</label>
+                                    <label>${i18n.settings.authType}:</label>
                                     <select class="auth-type" data-index="\${index}">
-                                        <option value="password" \${!server.privateKeyPath ? 'selected' : ''}>密码认证</option>
-                                        <option value="privateKey" \${server.privateKeyPath ? 'selected' : ''}>密钥文件</option>
+                                        <option value="password" \${!server.privateKeyPath ? 'selected' : ''}>${i18n.settings.authPassword}</option>
+                                        <option value="privateKey" \${server.privateKeyPath ? 'selected' : ''}>${i18n.settings.authPrivateKey}</option>
                                     </select>
                                 </div>
                                 <div class="form-group password-group" \${server.privateKeyPath ? 'style="display:none;"' : ''}>
-                                    <label>密码:</label>
+                                    <label>${i18n.settings.password}:</label>
                                     <input type="password" value="\${server.password || ''}" data-index="\${index}" data-field="password" placeholder="输入密码">
                                 </div>
                                 <div class="form-group key-group" \${!server.privateKeyPath ? 'style="display:none;"' : ''}>
-                                    <label>私钥文件路径:</label>
+                                    <label>${i18n.settings.privateKey}:</label>
                                     <div class="key-input-group">
                                         <input type="text" value="\${server.privateKeyPath || ''}" data-index="\${index}" data-field="privateKeyPath" placeholder="选择私钥文件" readonly>
                                         <button class="select-key-btn" data-index="\${index}">选择文件</button>
                                     </div>
                                     <div class="form-group passphrase-group">
-                                        <label>密码短语:</label>
+                                        <label>${i18n.settings.passphrase}:</label>
                                         <input type="password" value="\${server.passphrase || ''}" data-index="\${index}" data-field="passphrase" placeholder="如果私钥需要密码短语，请输入">
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label>本地工作区目录:</label>
+                                    <label>${i18n.settings.localPath}:</label>
                                     <input type="text" value="\${server.localPath || ''}" data-index="\${index}" data-field="localPath" placeholder="输入本地工作区目录">
                                 </div>
                                 <div class="form-group">
-                                    <label>远程目录:</label>
+                                    <label>${i18n.settings.remotePath}:</label>
                                     <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="输入远程目录">
                                 </div>
                                 <div class="actions">

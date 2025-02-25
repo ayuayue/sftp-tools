@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
+import { getLocaleText } from './i18n';
 
 export class StatusBarManager {
     private static instance: StatusBarManager;
     private statusBarItem: vscode.StatusBarItem;
+    private i18n = getLocaleText();
 
     private constructor() {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);

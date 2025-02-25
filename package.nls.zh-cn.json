@@ -1,0 +1,21 @@
+{
+    "views.servers.title": "SFTP 服务器",
+    "views.explorer.title": "文件浏览器",
+    "commands.showInfo": "显示配置信息",
+    "commands.addServer": "添加服务器",
+    "commands.editServer": "编辑服务器",
+    "commands.deleteServer": "删除服务器",
+    "commands.openSettings": "打开设置",
+    "commands.openSettingsEditor": "打开设置编辑器",
+    "commands.refreshServers": "刷新服务器列表",
+    "commands.refreshExplorer": "刷新文件浏览器",
+    "commands.uploadFile": "上传到当前服务器",
+    "commands.uploadToServer": "上传到其他服务器...",
+    "commands.uploadToAllServers": "上传到所有服务器",
+    "commands.deleteRemoteFile": "删除远程文件",
+    "commands.downloadRemoteFile": "下载远程文件",
+    "commands.cancelOperations": "取消操作",
+    "commands.disconnectServer": "断开连接",
+    "menus.uploadSubmenu": "SFTP 上传",
+    "configuration.title": "SFTP Tools"
+} 
