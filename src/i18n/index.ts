@@ -70,7 +70,8 @@ const zh = {
         directoryDeleted: '目录已删除',
         fileDeleted: '文件已删除',
         uploadingToServer: '正在上传到 {0}',
-        settingsSaved: '设置已保存'
+        settingsSaved: '设置已保存',
+        configMigrated: '已成功将旧版配置迁移到新版格式。'
     },
     messages: {
         confirmDelete: '确定要删除{0}吗？',
@@ -164,7 +165,8 @@ const en = {
         directoryDeleted: 'Directory deleted',
         fileDeleted: 'File deleted',
         uploadingToServer: 'Uploading to {0}',
-        settingsSaved: 'Settings saved'
+        settingsSaved: 'Settings saved',
+        configMigrated: 'Successfully migrated configuration from old version to new format.'
     },
     messages: {
         confirmDelete: 'Are you sure you want to delete {0}?',

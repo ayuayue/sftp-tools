@@ -35,6 +35,43 @@ export class SettingsEditorProvider {
                 fs.mkdirSync(vscodePath, { recursive: true });
             }
             this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
+           
+            // 检查是否需要迁移旧版本配置
+            this.migrateFromOldConfig();
+        }
+    }
+
+    // 从旧版本配置迁移
+    private migrateFromOldConfig(): void {
+        try {
+            // 如果新配置文件已经存在，则不进行迁移
+            if (fs.existsSync(this.configFilePath)) {
+                return;
+            }
+            
+            // 获取旧版本配置
+            const config = vscode.workspace.getConfiguration('sftp-tools');
+            const oldServers = config.get('servers');
+            
+            // 如果存在旧配置，则迁移
+            if (oldServers && Array.isArray(oldServers) && oldServers.length > 0) {
+                console.log('Migrating old sftp-tools configuration...');
+                
+                // 保存到新配置文件
+                this.saveServersToFile(oldServers);
+                
+                // 显示迁移成功消息
+                vscode.window.showInformationMessage(
+                    getLocaleText().status.configMigrated || 
+                    '已成功将旧版配置迁移到新版格式。'
+                );
+                
+                // 可选：清除旧配置
+                // 注意：这一步要谨慎，用户可能希望保留旧配置
+                // config.update('servers', undefined, vscode.ConfigurationTarget.Global);
+            }
+        } catch (error) {
+            console.error('Failed to migrate configuration:', error);
         }
     }
 

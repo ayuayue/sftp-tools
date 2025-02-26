@@ -9,6 +9,28 @@ import { getLocaleText } from './i18n';
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	// 检查是否是新安装或更新
+	const previousVersion = context.globalState.get<string>('sftp-tools.version');
+	const currentVersion = vscode.extensions.getExtension('your-publisher.sftp-tools')?.packageJSON.version;
+	
+	// 如果是更新（不是新安装），并且版本变更较大，显示通知
+	if (previousVersion && previousVersion !== currentVersion) {
+		// 主版本号变更，通知用户配置存储方式的变化
+		if (previousVersion.split('.')[0] !== currentVersion.split('.')[0]) {
+			vscode.window.showInformationMessage(
+				'您已更新到 SFTP Tools 的新版本。配置存储方式已更改，旧配置已自动迁移。',
+				'了解更多'
+			).then(selection => {
+				if (selection === '了解更多') {
+					vscode.env.openExternal(vscode.Uri.parse('https://github.com/ayuayue/sftp-tools/changelog.md'));
+				}
+			});
+		}
+	}
+	
+	// 保存当前版本
+	context.globalState.update('sftp-tools.version', currentVersion);
+
 	// 创建输出通道
 	const outputChannel = vscode.window.createOutputChannel('SFTP Tools');
 	const log = (message: string) => {
