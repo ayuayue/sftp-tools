@@ -7,6 +7,7 @@ import { time } from 'console';
 import { StatusBarManager } from './statusBarManager';
 import { getLocaleText } from './i18n';
 
+// 定义 ServerConfig 接口
 interface ServerConfig {
     name: string;
     host: string;

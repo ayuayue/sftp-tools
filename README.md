@@ -15,8 +15,7 @@
 - 👾 一键连接 ssh 终端
 - 🤗 多语言支持
 
-![alt text](./media/images/setting.gif)
-![alt text](./media/images/file_op.gif)
+![alt text](./media/images/Cursor.exe_20250226_182619.png)
 
 ## 使用方法
 

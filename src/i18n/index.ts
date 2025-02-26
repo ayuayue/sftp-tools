@@ -7,7 +7,7 @@ const zh = {
     },
     settings: {
         title: 'SFTP 设置',
-        generalSettings: '通用设置',
+        otherSettings: '其他设置',
         serverSettings: '服务器设置',
         showDeleteConfirm: '删除前确认',
         showDeleteConfirmDesc: '删除远程文件或文件夹前是否显示确认对话框',
@@ -102,7 +102,7 @@ const en = {
     },
     settings: {
         title: 'SFTP Settings',
-        generalSettings: 'General Settings',
+        otherSettings: 'Other Settings',
         serverSettings: 'Server Settings',
         showDeleteConfirm: 'Confirm before delete',
         showDeleteConfirmDesc: 'Show confirmation dialog before deleting remote files or folders',

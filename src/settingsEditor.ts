@@ -6,6 +6,19 @@ import * as fs from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
+// 定义 ServerConfig 接口
+interface ServerConfig {
+    name: string;
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+    remotePath: string;
+    workspacePath: string;
+}
+
 declare global {
     interface Window {
         acquireVsCodeApi(): any;
@@ -38,49 +51,58 @@ export class SettingsEditorProvider {
             fs.mkdirSync(vscodePath, { recursive: true });
         }
         this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
-                    // 检查是否需要迁移旧版本配置
-                    this.migrateFromOldConfig();
+        // 检查是否需要迁移旧版本配置
+        this.migrateFromOldConfig();
     }
-// 从旧版本配置迁移
-private migrateFromOldConfig(): void {
-    try {
-        // 如果新配置文件已经存在，则不进行迁移
-        if (fs.existsSync(this.configFilePath)) {
-            return;
+
+    // 从旧版本配置迁移
+    private migrateFromOldConfig(): void {
+        try {
+            // 如果新配置文件已经存在，则不进行迁移
+            if (fs.existsSync(this.configFilePath)) {
+                return;
+            }
+            
+            // 获取旧版本配置
+            const config = vscode.workspace.getConfiguration('sftp-tools');
+            const oldServers = config.get('servers');
+            
+            // 如果存在旧配置，则迁移
+            if (oldServers && Array.isArray(oldServers) && oldServers.length > 0) {
+                console.log('Migrating old sftp-tools configuration...');
+                
+                // 保存到新配置文件
+                this.saveServersToFile(oldServers);
+                
+                // 显示迁移成功消息
+                vscode.window.showInformationMessage(
+                    getLocaleText().status.configMigrated || 
+                    '已成功将旧版配置迁移到新版格式。'
+                );
+            }
+        } catch (error) {
+            console.error('Failed to migrate configuration:', error);
         }
-        
-        // 获取旧版本配置
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const oldServers = config.get('servers');
-        
-        // 如果存在旧配置，则迁移
-        if (oldServers && Array.isArray(oldServers) && oldServers.length > 0) {
-            console.log('Migrating old sftp-tools configuration...');
-            
-            // 保存到新配置文件
-            this.saveServersToFile(oldServers);
-            
-            // 显示迁移成功消息
-            vscode.window.showInformationMessage(
-                getLocaleText().status.configMigrated || 
-                '已成功将旧版配置迁移到新版格式。'
-            );
-            
-            // 可选：清除旧配置
-            // 注意：这一步要谨慎，用户可能希望保留旧配置
-            // config.update('servers', undefined, vscode.ConfigurationTarget.Global);
-        }
-    } catch (error) {
-        console.error('Failed to migrate configuration:', error);
     }
-}
+
     // 从文件加载服务器配置
-    private loadServersFromFile(): any[] {
+    private loadServersFromFile(): ServerConfig[] {
         try {
             if (this.configFilePath && fs.existsSync(this.configFilePath)) {
                 const configContent = fs.readFileSync(this.configFilePath, 'utf8');
                 const servers = JSON.parse(configContent).servers || [];
-                return servers;
+                // 确保每个服务器对象都包含必要的字段
+                return servers.map((server: any) => ({
+                    name: server.name || '',
+                    host: server.host || '',
+                    port: server.port || 22,
+                    username: server.username || '',
+                    password: server.password || undefined,
+                    privateKeyPath: server.privateKeyPath || undefined,
+                    passphrase: server.passphrase || undefined,
+                    workspacePath: server.workspacePath || '/',
+                    remotePath: server.remotePath || '/'
+                }));
             }
         } catch (error: any) {
             vscode.window.showErrorMessage('加载配置失败: ' + error.message);
@@ -89,7 +111,7 @@ private migrateFromOldConfig(): void {
     }
 
     // 将服务器配置保存到文件
-    private saveServersToFile(servers: any[]): boolean {
+    private saveServersToFile(servers: ServerConfig[]): boolean {
         try {
             if (this.configFilePath) {
                 const configData = { servers };
@@ -129,13 +151,6 @@ private migrateFromOldConfig(): void {
     public async showSettingsEditor(serverToEdit?: ServerItem) {
         if (this._view) {
             this._view.reveal(vscode.ViewColumn.One);
-            
-            if (serverToEdit) {
-                this._view.webview.postMessage({ 
-                    command: 'editServer',
-                    serverName: serverToEdit.label 
-                });
-            }
             return;
         }
 
@@ -152,16 +167,10 @@ private migrateFromOldConfig(): void {
 
         const servers = this.loadServersFromFile();
         const serversJson = JSON.stringify(servers);
-        this._view.webview.html = this._getHtmlForWebview();
+        this._view.webview.html = this.getWebviewContent();
         
         setTimeout(() => {
-            this._view?.webview.postMessage({ command: 'loadSettings', servers });
-            if (serverToEdit) {
-                this._view?.webview.postMessage({ 
-                    command: 'editServer',
-                    serverName: serverToEdit.label 
-                });
-            }
+            this._view?.webview.postMessage({ command: 'loadSettings', servers, serverToEdit });
         }, 100);
 
         this._view.onDidDispose(() => {
@@ -174,23 +183,13 @@ private migrateFromOldConfig(): void {
                     case 'loadSettings':
                         let servers;
                         try {
-                            servers = JSON.parse(message.servers); // 解析 JSON 字符串为数组
+                            servers = message.servers; // 解析 JSON 字符串为数组
                         } catch (error: any) {
                             throw new Error('解析服务器配置失败: ' + error.message);
                         }
                         if (!Array.isArray(servers)) {
                             throw new Error('服务器配置无效，必须是数组');
                         }
-                        // 添加新服务器
-                        servers.push({
-                            name: '',
-                            host: '',
-                            port: 22,
-                            username: '',
-                            password: '',
-                            localPath: '/',
-                            remotePath: '/'
-                        });
                         if (this._view) {
                             this._view.webview.postMessage({
                                 command: 'saveSettings',
@@ -201,7 +200,7 @@ private migrateFromOldConfig(): void {
                         break;
                     case 'saveSettings':
                         try {
-                            const servers = JSON.parse(message.servers); // 解析 JSON 字符串为数组
+                            const servers = message.servers; // 解析 JSON 字符串为数组
                             if (!Array.isArray(servers)) {
                                 throw new Error('服务器配置无效，必须是数组');
                             }
@@ -266,7 +265,7 @@ private migrateFromOldConfig(): void {
                     case 'deleteConfirmed':
                         this.removeServer(message.index);
                         break;
-                    case 'updateGeneralSetting':
+                    case 'updateOtherSetting':
                         await vscode.workspace.getConfiguration('sftp-tools').update(
                             message.setting,
                             message.value,
@@ -287,7 +286,7 @@ private migrateFromOldConfig(): void {
         });
     }
 
-    private _getHtmlForWebview(): string {
+    private getWebviewContent(): string {
         const i18n = getLocaleText();
         const nonce = getNonce();
         const serversJson = JSON.stringify(this.loadServersFromFile());
@@ -395,7 +394,7 @@ private migrateFromOldConfig(): void {
                 }
                 
                 /* 通用设置面板样式 */
-                #generalSettingsPanel {
+                #otherSettingsPanel {
                     max-width: 800px;
                     margin: 0 auto;
                     background-color: var(--vscode-editor-background);
@@ -409,7 +408,7 @@ private migrateFromOldConfig(): void {
                 }
                 
                 /* 确保两个面板完全分离 */
-                #generalSettingsPanel,
+                #otherSettingsPanel,
                 #serversSettingsPanel {
                     height: 100%;
                     overflow: auto;
@@ -697,31 +696,18 @@ private migrateFromOldConfig(): void {
         <body>
             <div class="app-container">
                 <div class="header">
-                    <h1>${i18n.settings.title}</h1>
+                    <h3>${i18n.settings.title}</h3>
                 </div>
                 
                 <div class="settings-tab-bar">
-                    <div class="settings-tab active" data-tab="general">${i18n.settings.generalSettings}</div>
-                    <div class="settings-tab" data-tab="servers">${i18n.settings.serverSettings}</div>
+                    <div class="settings-tab active" data-tab="servers">${i18n.settings.serverSettings}</div>
+                    <div class="settings-tab" data-tab="other">${i18n.settings.otherSettings}</div>
                 </div>
                 
                 <div class="content-container" style="flex: 1; overflow: hidden;">
-                    <!-- 通用设置面板 -->
-                    <div id="generalSettingsPanel" class="settings-panel active" style="padding: 20px; height: 100%;">
-                        <div class="setting-item">
-                            <div class="setting-item-label">
-                                <div>${i18n.settings.showDeleteConfirm}</div>
-                                <div class="setting-item-description">${i18n.settings.showDeleteConfirmDesc}</div>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="showDeleteConfirmToggle" ${showDeleteConfirm ? 'checked' : ''}>
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                    </div>
                     
                     <!-- 服务器设置面板 -->
-                    <div id="serversSettingsPanel" class="settings-panel" style="height: 100%;">
+                    <div id="serversSettingsPanel" class="settings-panel active" style="height: 100%;">
                         <div class="sidebar">
                             <div class="sidebar-header">${i18n.view.servers}</div>
                             <ul class="server-nav" id="serverNav"></ul>
@@ -751,8 +737,22 @@ private migrateFromOldConfig(): void {
                             </div>
                         </div>
                     </div>
+                    <!-- 通用设置面板 -->
+                    <div id="otherSettingsPanel" class="settings-panel" style="padding: 20px; height: 100%;">
+                        <div class="setting-item">
+                            <div class="setting-item-label">
+                                <div>${i18n.settings.showDeleteConfirm}</div>
+                                <div class="setting-item-description">${i18n.settings.showDeleteConfirmDesc}</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showDeleteConfirmToggle" ${showDeleteConfirm ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
             </div>
+
             
             <script nonce="${nonce}">
                 // 全局变量
@@ -760,15 +760,26 @@ private migrateFromOldConfig(): void {
                 let servers = ${serversJson};
                 let activeServerIndex = 0;
                 let showDeleteConfirm = ${showDeleteConfirm};
-                let activeTab = 'general';
+                let activeTab = 'servers';
                 
                 // 添加消息处理
                 window.addEventListener('message', event => {
                     const message = event.data;
+                    console.log('event listener ',message);
                     switch (message.command) {
                         case 'loadSettings':
                             servers = message.servers || [];
+                            serverToEdit = message.serverToEdit || {}
                             activeServerIndex = 0;
+                            for (let i = 0; i < servers.length; i++) {
+                                console.log(servers[i],serverToEdit);
+                                if(servers[i].name == serverToEdit.label){
+                                    activeServerIndex = i;
+                                    renderServerNav();
+                                    break;
+                                }
+                            }
+                            console.log(activeServerIndex);
                             render();
                             break;
                         case 'keyFileSelected':
@@ -787,7 +798,7 @@ private migrateFromOldConfig(): void {
                 document.getElementById('showDeleteConfirmToggle').addEventListener('change', (e) => {
                     showDeleteConfirm = e.target.checked;
                     vscode.postMessage({
-                        command: 'updateGeneralSetting',
+                        command: 'updateOtherSetting',
                         setting: 'showConfirmDialog',
                         value: showDeleteConfirm
                     });
@@ -812,6 +823,7 @@ private migrateFromOldConfig(): void {
                         } else {
                             console.error('No panel found for tab:', tabId); // 添加错误信息
                         }
+                        render();
                     });
                 });
                 
@@ -996,7 +1008,6 @@ private migrateFromOldConfig(): void {
                 
                 // 添加服务器
                 function addServer() {
-                    // servers = JSON.parse(servers);
                     servers.push({
                         name: '',
                         host: '',
@@ -1007,12 +1018,12 @@ private migrateFromOldConfig(): void {
                         remotePath: '/'
                     });
                     activeServerIndex = servers.length - 1; // 选中新添加的服务器
+                    render();
                     vscode.postMessage({
-                        command: 'saveSettings',
+                        command: 'loadSettings',
                         servers: JSON.stringify(servers)
                     });
                 }
-                
                 // 删除服务器
                 function removeServer(index) {
                     servers.splice(index, 1);
@@ -1042,6 +1053,7 @@ private migrateFromOldConfig(): void {
                 
                 // 保存设置
                 function saveSettings() {
+                    console.log(servers);
                     vscode.postMessage({
                         command: 'saveSettings',
                         servers: servers
@@ -1144,7 +1156,7 @@ private migrateFromOldConfig(): void {
                     vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
                 }
                 break;
-            case 'updateGeneralSetting':
+            case 'updateOtherSetting':
                 try {
                     const config = vscode.workspace.getConfiguration('sftp-tools');
                     await config.update(message.setting, message.value, vscode.ConfigurationTarget.Global);
