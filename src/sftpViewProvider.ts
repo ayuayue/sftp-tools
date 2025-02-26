@@ -27,6 +27,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
     private activeServer?: string;  // 添加激活服务器标记
     private configFilePath: string = '';
     private fileWatcher?: vscode.FileSystemWatcher;
+    private _view?: vscode.WebviewPanel;
 
     constructor() {
         this.initConfigFilePath();
@@ -67,6 +68,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
         try {
             if (this.configFilePath && fs.existsSync(this.configFilePath)) {
                 const configContent = fs.readFileSync(this.configFilePath, 'utf8');
+                console.log('Loaded servers from file:', configContent);
                 return JSON.parse(configContent).servers || [];
             }
         } catch (error) {

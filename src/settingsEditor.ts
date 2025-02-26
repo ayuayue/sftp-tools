@@ -28,62 +28,62 @@ export class SettingsEditorProvider {
 
     private initConfigFilePath() {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (workspaceFolder) {
-            // 创建 .vscode 文件夹（如果不存在）
-            const vscodePath = path.join(workspaceFolder.uri.fsPath, '.vscode');
-            if (!fs.existsSync(vscodePath)) {
-                fs.mkdirSync(vscodePath, { recursive: true });
-            }
-            this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
-           
-            // 检查是否需要迁移旧版本配置
-            this.migrateFromOldConfig();
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('未找到工作区文件夹，请确保打开了一个工作区。');
+            return;
         }
-    }
-
-    // 从旧版本配置迁移
-    private migrateFromOldConfig(): void {
-        try {
-            // 如果新配置文件已经存在，则不进行迁移
-            if (fs.existsSync(this.configFilePath)) {
-                return;
-            }
-            
-            // 获取旧版本配置
-            const config = vscode.workspace.getConfiguration('sftp-tools');
-            const oldServers = config.get('servers');
-            
-            // 如果存在旧配置，则迁移
-            if (oldServers && Array.isArray(oldServers) && oldServers.length > 0) {
-                console.log('Migrating old sftp-tools configuration...');
-                
-                // 保存到新配置文件
-                this.saveServersToFile(oldServers);
-                
-                // 显示迁移成功消息
-                vscode.window.showInformationMessage(
-                    getLocaleText().status.configMigrated || 
-                    '已成功将旧版配置迁移到新版格式。'
-                );
-                
-                // 可选：清除旧配置
-                // 注意：这一步要谨慎，用户可能希望保留旧配置
-                // config.update('servers', undefined, vscode.ConfigurationTarget.Global);
-            }
-        } catch (error) {
-            console.error('Failed to migrate configuration:', error);
+        // 创建 .vscode 文件夹（如果不存在）
+        const vscodePath = path.join(workspaceFolder.uri.fsPath, '.vscode');
+        if (!fs.existsSync(vscodePath)) {
+            fs.mkdirSync(vscodePath, { recursive: true });
         }
+        this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
+                    // 检查是否需要迁移旧版本配置
+                    this.migrateFromOldConfig();
     }
-
+// 从旧版本配置迁移
+private migrateFromOldConfig(): void {
+    try {
+        // 如果新配置文件已经存在，则不进行迁移
+        if (fs.existsSync(this.configFilePath)) {
+            return;
+        }
+        
+        // 获取旧版本配置
+        const config = vscode.workspace.getConfiguration('sftp-tools');
+        const oldServers = config.get('servers');
+        
+        // 如果存在旧配置，则迁移
+        if (oldServers && Array.isArray(oldServers) && oldServers.length > 0) {
+            console.log('Migrating old sftp-tools configuration...');
+            
+            // 保存到新配置文件
+            this.saveServersToFile(oldServers);
+            
+            // 显示迁移成功消息
+            vscode.window.showInformationMessage(
+                getLocaleText().status.configMigrated || 
+                '已成功将旧版配置迁移到新版格式。'
+            );
+            
+            // 可选：清除旧配置
+            // 注意：这一步要谨慎，用户可能希望保留旧配置
+            // config.update('servers', undefined, vscode.ConfigurationTarget.Global);
+        }
+    } catch (error) {
+        console.error('Failed to migrate configuration:', error);
+    }
+}
     // 从文件加载服务器配置
     private loadServersFromFile(): any[] {
         try {
             if (this.configFilePath && fs.existsSync(this.configFilePath)) {
                 const configContent = fs.readFileSync(this.configFilePath, 'utf8');
-                return JSON.parse(configContent).servers || [];
+                const servers = JSON.parse(configContent).servers || [];
+                return servers;
             }
-        } catch (error) {
-            console.error('Failed to load configuration:', error);
+        } catch (error: any) {
+            vscode.window.showErrorMessage('加载配置失败: ' + error.message);
         }
         return [];
     }
@@ -96,8 +96,8 @@ export class SettingsEditorProvider {
                 fs.writeFileSync(this.configFilePath, JSON.stringify(configData, null, 2), 'utf8');
                 return true;
             }
-        } catch (error) {
-            console.error('Failed to save configuration:', error);
+        } catch (error: any) {
+            vscode.window.showErrorMessage('保存配置失败: ' + error.message);
         }
         return false;
     }
@@ -147,12 +147,11 @@ export class SettingsEditorProvider {
                 enableScripts: true,
                 retainContextWhenHidden: true,
                 localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'out'), vscode.Uri.joinPath(this._extensionUri, 'src', 'webview')],
-                enableCommandUris: true
             }
         );
 
         const servers = this.loadServersFromFile();
-        
+        const serversJson = JSON.stringify(servers);
         this._view.webview.html = this._getHtmlForWebview();
         
         setTimeout(() => {
@@ -172,17 +171,48 @@ export class SettingsEditorProvider {
         this._view.webview.onDidReceiveMessage(async (message) => {
             try {
                 switch (message.command) {
+                    case 'loadSettings':
+                        let servers;
+                        try {
+                            servers = JSON.parse(message.servers); // 解析 JSON 字符串为数组
+                        } catch (error: any) {
+                            throw new Error('解析服务器配置失败: ' + error.message);
+                        }
+                        if (!Array.isArray(servers)) {
+                            throw new Error('服务器配置无效，必须是数组');
+                        }
+                        // 添加新服务器
+                        servers.push({
+                            name: '',
+                            host: '',
+                            port: 22,
+                            username: '',
+                            password: '',
+                            localPath: '/',
+                            remotePath: '/'
+                        });
+                        if (this._view) {
+                            this._view.webview.postMessage({
+                                command: 'saveSettings',
+                                servers: JSON.stringify(servers)
+                            });
+                        }
+                        console.log('Received servers:', message.servers);
+                        break;
                     case 'saveSettings':
                         try {
+                            const servers = JSON.parse(message.servers); // 解析 JSON 字符串为数组
+                            if (!Array.isArray(servers)) {
+                                throw new Error('服务器配置无效，必须是数组');
+                            }
                             // 验证密钥文件配置
-                            const servers = message.servers;
                             for (let i = 0; i < servers.length; i++) {
                                 const server = servers[i];
                                 if (!server.password && !server.privateKeyPath) {
                                     throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
                                 }
                             }
-                            if (this.saveServersToFile(message.servers)) {
+                            if (this.saveServersToFile(servers)) {
                                 vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
                                 vscode.commands.executeCommand('sftp-tools.refreshServers');
                                 vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
@@ -236,6 +266,14 @@ export class SettingsEditorProvider {
                     case 'deleteConfirmed':
                         this.removeServer(message.index);
                         break;
+                    case 'updateGeneralSetting':
+                        await vscode.workspace.getConfiguration('sftp-tools').update(
+                            message.setting,
+                            message.value,
+                            vscode.ConfigurationTarget.Global
+                        );
+                        vscode.commands.executeCommand('sftp-tools.refreshServers');
+                        break;
                     default:
                         const errorAnswer = await vscode.window.showWarningMessage(
                             'Invalid command received. Please check your input.',
@@ -244,7 +282,6 @@ export class SettingsEditorProvider {
                         this._view?.webview.postMessage({ command: 'error', message: errorAnswer });
                 }
             } catch (error) {
-                console.error('Error handling message:', error);
                 vscode.window.showErrorMessage('Failed to save settings');
             }
         });
@@ -562,7 +599,6 @@ export class SettingsEditorProvider {
                 
                 .empty-state-tip {
                     margin-bottom: 8px;
-                    max-width: 400px;
                 }
                 
                 /* 侧边栏头部 */
@@ -689,7 +725,7 @@ export class SettingsEditorProvider {
                         <div class="sidebar">
                             <div class="sidebar-header">${i18n.view.servers}</div>
                             <ul class="server-nav" id="serverNav"></ul>
-                            <div class="sidebar-footer">
+                            <div class="sidebar-footer" style="margin-top: auto;">
                                 <button id="addServerBtn" class="add-server-btn">
                                     <span class="codicon codicon-add"></span>
                                     ${i18n.settings.addServer}
@@ -769,12 +805,12 @@ export class SettingsEditorProvider {
                         activeTab = tabId;
                         document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.remove('active'));
                         
-                        if (tabId === 'general') {
-                            document.getElementById('generalSettingsPanel').classList.add('active');
-                        } else if (tabId === 'servers') {
-                            document.getElementById('serversSettingsPanel').classList.add('active');
-                            renderServerNav();
-                            renderServerPanels();
+                        // 确保面板存在再添加 active 类
+                        const activePanel = document.getElementById(tabId + 'SettingsPanel');
+                        if (activePanel) {
+                            activePanel.classList.add('active');
+                        } else {
+                            console.error('No panel found for tab:', tabId); // 添加错误信息
                         }
                     });
                 });
@@ -829,7 +865,6 @@ export class SettingsEditorProvider {
                                     <input type="text" class="server-name-input" style="width: 100%;" value="\${server.name || ''}" data-index="\${index}" data-field="name" placeholder="${i18n.settings.enterServerName}">
                                 </div>
                             </div>
-                            
                             <div class="box-section">
                                 <div class="box-header">${i18n.settings.host}</div>
                                 <div class="form-group">
@@ -845,7 +880,6 @@ export class SettingsEditorProvider {
                                     <input type="text" value="\${server.username || ''}" data-index="\${index}" data-field="username" placeholder="${i18n.settings.enterUsername}">
                                 </div>
                             </div>
-                            
                             <div class="box-section">
                                 <div class="box-header">${i18n.settings.authType}</div>
                                 <div class="auth-options">
@@ -856,37 +890,34 @@ export class SettingsEditorProvider {
                                         ${i18n.settings.authPrivateKey}
                                     </div>
                                 </div>
-                                
-                                <div class="form-group password-group" \${server.privateKeyPath ? 'style="display:none;"' : ''}>
+                                <div class="form-group password-group" style="display: \${!server.privateKeyPath ? '' : 'none'};">
                                     <label>${i18n.settings.password}:</label>
                                     <input type="password" value="\${server.password || ''}" data-index="\${index}" data-field="password" placeholder="${i18n.settings.enterPassword}">
                                 </div>
-                                
-                                <div class="form-group key-group" \${!server.privateKeyPath ? 'style="display:none;"' : ''}>
+                                <div class="form-group key-group" style="display: \${server.privateKeyPath ? '' : 'none'};">
                                     <label>${i18n.settings.privateKey}:</label>
                                     <div class="key-file-selector">
                                         <input type="text" value="\${server.privateKeyPath || ''}" data-index="\${index}" data-field="privateKeyPath" placeholder="${i18n.settings.enterPrivateKeyPath}">
                                         <button class="select-key-file-btn" data-index="\${index}">${i18n.settings.selectPrivateKey}</button>
                                     </div>
                                 </div>
-                                <div class="form-group passphrase-group" \${!server.privateKeyPath ? 'style="display:none;"' : ''}>
+                                <div class="form-group passphrase-group" style="display: \${server.privateKeyPath ? '' : 'none'};">
                                     <label>${i18n.settings.passphrase}:</label>
                                     <input type="password" value="\${server.passphrase || ''}" data-index="\${index}" data-field="passphrase" placeholder="${i18n.settings.enterPassphrase}">
                                 </div>
                             </div>
-                            
                             <div class="box-section">
                                 <div class="box-header">${i18n.settings.paths}</div>
                                 <div class="form-group">
                                     <label>${i18n.settings.localPath}:</label>
-                                    <input type="text" value="\${server.localPath || ''}" data-index="\${index}" data-field="localPath" placeholder="${i18n.settings.enterLocalPath}">
+                                    <input type="text" value="\${server.localPath || '/'}" data-index="\${index}" data-field="localPath" placeholder="${i18n.settings.enterLocalPath}" onpaste="return true;">
                                 </div>
                                 <div class="form-group">
                                     <label>${i18n.settings.remotePath}:</label>
-                                    <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="${i18n.settings.enterRemotePath}">
+                                    <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="${i18n.settings.enterRemotePath}" onpaste="return true;">
                                 </div>
                             </div>
-                            <div class="actions">
+                            <div class="actions" style="margin-top: auto;">
                                 <button class="delete-btn" data-index="\${index}">
                                     <span class="button-icon">🗑️</span>
                                     ${i18n.settings.delete}
@@ -965,17 +996,21 @@ export class SettingsEditorProvider {
                 
                 // 添加服务器
                 function addServer() {
+                    // servers = JSON.parse(servers);
                     servers.push({
                         name: '',
                         host: '',
                         port: 22,
                         username: '',
                         password: '',
-                        localPath: '',
+                        localPath: '/',
                         remotePath: '/'
                     });
                     activeServerIndex = servers.length - 1; // 选中新添加的服务器
-                    render();
+                    vscode.postMessage({
+                        command: 'saveSettings',
+                        servers: JSON.stringify(servers)
+                    });
                 }
                 
                 // 删除服务器
@@ -1044,7 +1079,6 @@ export class SettingsEditorProvider {
             </script>
         </body>
         </html>`;
-        
         return htmlContent;
     }
 
@@ -1060,15 +1094,18 @@ export class SettingsEditorProvider {
                 break;
             case 'saveSettings':
                 try {
+                    const servers = JSON.parse(message.servers); // 解析 JSON 字符串为数组
+                    if (!Array.isArray(servers)) {
+                        throw new Error('服务器配置无效，必须是数组');
+                    }
                     // 验证密钥文件配置
-                    const servers = message.servers;
                     for (let i = 0; i < servers.length; i++) {
                         const server = servers[i];
                         if (!server.password && !server.privateKeyPath) {
                             throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
                         }
                     }
-                    this.saveServersToFile(message.servers);
+                    this.saveServersToFile(servers);
                     vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
                     vscode.commands.executeCommand('sftp-tools.refreshServers');
                     vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
