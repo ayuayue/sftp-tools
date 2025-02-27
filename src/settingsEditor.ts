@@ -295,14 +295,22 @@ export class SettingsEditorProvider {
         const config = vscode.workspace.getConfiguration('sftp-tools');
         const showDeleteConfirm = config.get('showConfirmDialog', true);
         
-        // 直接构建 HTML 字符串，包含内联样式和脚本
+        // 修改 CSP 策略
+        const csp = `
+            default-src 'none';
+            style-src 'unsafe-inline';
+            script-src 'nonce-${nonce}';
+            frame-src 'none';
+            sandbox allow-scripts;
+        `;
+        
         const htmlContent = `
         <!DOCTYPE html>
         <html lang="zh-cn">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+            <meta http-equiv="Content-Security-Policy" content="${csp.replace(/\s+/g, ' ')}">
             <title>${i18n.settings.title}</title>
             <style>
                 :root {
