@@ -65,7 +65,7 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
     }
 
     // 从文件加载服务器配置
-    private loadServersFromFile(): ServerConfig[] {
+    public loadServersFromFile(): ServerConfig[] {
         try {
             if (this.configFilePath && fs.existsSync(this.configFilePath)) {
                 const configContent = fs.readFileSync(this.configFilePath, 'utf8');
@@ -122,112 +122,6 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
         return Promise.resolve([]);
     }
 
-    async addServer() {
-        const servers: ServerConfig[] = this.loadServersFromFile();
-        const i18n = getLocaleText();
-
-        // 验证服务器名称
-        const validateServerName = (name: string): string | undefined => {
-            if (!name) {
-                return i18n.settings.serverNameRequired;
-            }
-            if (servers.some(s => s.name === name)) {
-                return i18n.settings.serverNameExists;
-            }
-            return undefined;
-        };
-
-        const name = await vscode.window.showInputBox({
-            prompt: i18n.settings.enterServerName,
-            validateInput: validateServerName
-        });
-        if (!name) { return; }
-
-        const host = await vscode.window.showInputBox({ 
-            prompt: i18n.settings.enterHost
-        });
-        if (!host) { return; }
-
-        const port = await vscode.window.showInputBox({ 
-            prompt: i18n.settings.enterPort,
-            value: '22'
-        });
-        if (!port) { return; }
-
-        const username = await vscode.window.showInputBox({ 
-            prompt: i18n.settings.enterUsername
-        });
-        if (!username) { return; }
-
-        // 选择认证方式
-        const authType = await vscode.window.showQuickPick(
-            [
-                { label: i18n.settings.authPassword, value: 'password' },
-                { label: i18n.settings.authPrivateKey, value: 'privateKey' }
-            ],
-            { placeHolder: i18n.settings.selectAuthType }
-        );
-        if (!authType) { return; }
-
-        let password: string | undefined;
-        let privateKeyPath: string | undefined;
-        let passphrase: string | undefined;
-
-        if (authType.value === 'password') {
-            password = await vscode.window.showInputBox({ 
-                prompt: i18n.settings.enterPassword,
-                password: true
-            });
-            if (!password) { return; }
-        } else {
-            const result = await vscode.window.showOpenDialog({
-                canSelectFiles: true,
-                canSelectFolders: false,
-                canSelectMany: false,
-                title: i18n.settings.selectPrivateKey,
-                filters: {
-                    'All files': ['*']
-                }
-            });
-            if (!result || result.length === 0) { return; }
-            privateKeyPath = result[0].fsPath;
-
-            // 询问是否需要密码短语
-            const needPassphrase = await vscode.window.showQuickPick(
-                [i18n.settings.yes, i18n.settings.no],
-                { placeHolder: i18n.settings.needPassphrase }
-            );
-            if (!needPassphrase) { return; }
-
-            if (needPassphrase === i18n.settings.yes) {
-                passphrase = await vscode.window.showInputBox({
-                    prompt: i18n.settings.enterPassphrase,
-                    password: true
-                });
-                if (!passphrase) { return; }
-            }
-        }
-
-        const remotePath = await vscode.window.showInputBox({ 
-            prompt: i18n.settings.enterRemotePath,
-            value: '/'
-        });
-        if (!remotePath) { return; }
-
-        servers.push({
-            name,
-            host,
-            port: parseInt(port),
-            username,
-            ...(password ? { password } : {}),
-            ...(privateKeyPath ? { privateKeyPath } : {}),
-            ...(passphrase ? { passphrase } : {}),
-            remotePath
-        });
-
-        this.saveServersToFile(servers);
-        this.refresh();
-    }
 
     async editServer(serverItem: ServerItem) {
         const config = vscode.workspace.getConfiguration('sftp-tools');
@@ -407,8 +301,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
 
     private async updateCurrentServer() {
         if (this.currentServer) {
-            const config = vscode.workspace.getConfiguration('sftp-tools');
-            const servers: ServerConfig[] = config.get('servers') || [];
+            const servers: ServerConfig[] = this.serversProvider.loadServersFromFile();
             const updatedServer = servers.find(s => s.name === this.currentServer?.name);
             
             if (updatedServer) {
@@ -553,7 +446,29 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             'json': 'json',
             'md': 'markdown',
             'txt': 'plaintext',
-            // ... 添加更多映射
+            'php': 'php',
+            'html': 'html',
+            'css': 'css',
+            'less': 'less',
+            'sass': 'sass',
+            'scss': 'scss',
+            'xml': 'xml',
+            'yaml': 'yaml',
+            'yml': 'yaml',
+            'toml': 'toml',
+            'ini': 'ini',
+            'conf': 'ini',
+            'cfg': 'ini',
+            'go': 'go',
+            'java': 'java',
+            'kt': 'kotlin',
+            'kts': 'kotlin',
+            'py': 'python',
+            'rb': 'ruby',
+            'sh': 'bash',
+            'sql': 'sql',
+            'log': 'log',
+            'csv': 'csv',
         };
         return langMap[ext || ''] || 'plaintext';
     }
@@ -643,8 +558,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
 
     // 获取所有服务器配置
     public getServers(): ServerConfig[] {
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        return config.get('servers') || [];
+        return this.serversProvider.loadServersFromFile();
     }
 
     // 上传到指定服务器

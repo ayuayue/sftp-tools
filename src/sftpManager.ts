@@ -76,6 +76,9 @@ export class SftpManager {
                     reject(err);
                     return;
                 }
+                list.sort((a: ssh2.FileEntry, b: ssh2.FileEntry) => {
+                    return a.filename.localeCompare(b.filename);
+                });
                 resolve(list);
             });
         });

@@ -3,7 +3,7 @@
   "displayName": "SFTP Tools",
   "description": "A powerful SFTP/FTP client for VS Code with an intuitive interface",
   "publisher": "caoayu",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "author": {
     "name": "caoayu",
     "email": "caoayu80@gmail.com"
@@ -150,6 +150,11 @@
         "command": "sftp-tools.uploadDirectoryToAllServers",
         "title": "%commands.uploadDirectoryToAllServers%",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "sftp-tools.disconnectAllServers",
+        "title": "%commands.disconnectAllServers%",
+        "icon": "$(debug-disconnect)"
       }
     ],
     "configuration": {
@@ -229,11 +234,6 @@
         {
           "command": "sftp-tools.openSettingsEditor",
           "when": "view == sftp-tools-servers",
-          "group": "navigation"
-        },
-        {
-          "command": "sftp-tools.cancelOperations",
-          "when": "view == sftp-tools-explorer && sftp-tools.hasActiveOperations",
           "group": "navigation"
         }
       ],

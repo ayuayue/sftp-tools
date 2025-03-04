@@ -79,6 +79,8 @@ export class SettingsEditorProvider {
                     getLocaleText().status.configMigrated || 
                     '已成功将旧版配置迁移到新版格式。'
                 );
+                vscode.commands.executeCommand('sftp-tools.refreshServers');
+                vscode.workspace.getConfiguration('sftp-tools').update('servers', []);
             }
         } catch (error) {
             console.error('Failed to migrate configuration:', error);
@@ -124,30 +126,6 @@ export class SettingsEditorProvider {
         return false;
     }
 
-    private async deleteRemoteFile(fileUri: vscode.Uri) {
-        const confirmDelete = await vscode.window.showWarningMessage(
-            'Are you sure you want to delete this remote file?',
-            'Yes', 'No'
-        );
-        if (confirmDelete === 'Yes') {
-            // 这里调用删除文件的 API
-            // 例如: await this.sftpClient.delete(fileUri);
-            vscode.window.showInformationMessage(`Deleted remote file: ${fileUri.fsPath}`);
-        }
-    }
-
-    private async downloadRemoteFile(fileUri: vscode.Uri) {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) {
-            vscode.window.showErrorMessage('No workspace folder found.');
-            return;
-        }
-        const localPath = path.join(workspaceFolder.uri.fsPath, fileUri.fsPath.split('/').pop()!);
-        // 这里调用下载文件的 API
-        // 例如: await this.sftpClient.download(fileUri, localPath);
-        vscode.window.showInformationMessage(`Downloaded remote file to: ${localPath}`);
-    }
-
     public async showSettingsEditor(serverToEdit?: ServerItem) {
         if (this._view) {
             this._view.reveal(vscode.ViewColumn.One);
@@ -166,7 +144,6 @@ export class SettingsEditorProvider {
         );
 
         const servers = this.loadServersFromFile();
-        const serversJson = JSON.stringify(servers);
         this._view.webview.html = this.getWebviewContent();
         
         setTimeout(() => {
@@ -187,7 +164,7 @@ export class SettingsEditorProvider {
                         } catch (error: any) {
                             throw new Error('解析服务器配置失败: ' + error.message);
                         }
-                        if (!Array.isArray(servers)) {
+                        if (!Array.isArray(JSON.parse(servers))) {
                             throw new Error('服务器配置无效，必须是数组');
                         }
                         if (this._view) {

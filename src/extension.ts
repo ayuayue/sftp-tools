@@ -9,25 +9,7 @@ import { getLocaleText } from './i18n';
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-	// 检查是否是新安装或更新
-	const previousVersion = context.globalState.get<string>('sftp-tools.version');
-	const currentVersion = vscode.extensions.getExtension('your-publisher.sftp-tools')?.packageJSON.version;
-	
-	// 如果是更新（不是新安装），并且版本变更较大，显示通知
-	if (previousVersion && previousVersion !== currentVersion) {
-		// 主版本号变更，通知用户配置存储方式的变化
-		if (previousVersion.split('.')[0] !== currentVersion.split('.')[0]) {
-			vscode.window.showInformationMessage(
-				'您已更新到 SFTP Tools 的新版本。配置存储方式已更改，旧配置已自动迁移。',
-				'了解更多'
-			).then(selection => {
-				if (selection === '了解更多') {
-					vscode.env.openExternal(vscode.Uri.parse('https://github.com/ayuayue/sftp-tools/changelog.md'));
-				}
-			});
-		}
-	}
-	
+	const currentVersion = context.extension.packageJSON.version;
 	// 保存当前版本
 	context.globalState.update('sftp-tools.version', currentVersion);
 
@@ -66,18 +48,18 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('sftp-tools.showInfo', () => {
 			const config = vscode.workspace.getConfiguration('sftp-tools');
+			const outputChannel = vscode.window.createOutputChannel('SFTP Tools');
 			const servers = config.get('servers') || [];
-			console.log('SFTP Tools Status:');
-			console.log(`- Total servers configured: ${Object.keys(servers).length}`);
-			console.log('- Configured servers:');
-			Object.keys(servers).forEach((server: any) => {
-				console.log(`  * ${server.name} (${server.host}:${server.port})`);
+			outputChannel.appendLine('SFTP Tools Status:');
+			outputChannel.appendLine(`- Total servers configured: ${Object.keys(servers).length}`);
+			outputChannel.appendLine('- Configured servers:');
+			Object.values(servers).forEach((server: any) => {
+				outputChannel.appendLine(`  * ${server.name} (${server.host}:${server.port})`);
 			});
 			log(`SFTP Tools Info: ${Object.keys(servers).length} servers configured. Check Output for details.`);
+			outputChannel.show(true);
 		}),
-		vscode.commands.registerCommand('sftp-tools.addServer', () => {
-			sftpServersProvider.addServer();
-		}),
+
 		vscode.commands.registerCommand('sftp-tools.editServer', (item) => {
 			settingsEditorProvider.showSettingsEditor(item);
 		}),
