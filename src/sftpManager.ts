@@ -103,22 +103,17 @@ export class SftpManager {
         });
     }
 
-    async writeFile(path: string, content: string): Promise<void> {
+    async writeFile(remotePath: string, content: string | Buffer): Promise<void> {
+        if (!this.sftp) {
+            throw new Error('SFTP connection not established');
+        }
         return new Promise((resolve, reject) => {
-            if (!this.sftp) {
-                reject(new Error('SFTP not connected'));
-                return;
-            }
-
-            this.checkCancelled();
-
-            // 直接写入/覆盖文件
-            this.sftp.writeFile(path, content, (err: any) => {
+            this.sftp!.writeFile(remotePath, content, (err) => {
                 if (err) {
                     reject(err);
-                    return;
+                } else {
+                    resolve();
                 }
-                resolve();
             });
         });
     }
@@ -244,6 +239,24 @@ export class SftpManager {
                     return;
                 }
                 resolve(stats);
+            });
+        });
+    }
+    async readFileAsBuffer(path: string): Promise<Buffer> {
+        return new Promise((resolve, reject) => {
+            if (!this.sftp) {
+                reject(new Error('SFTP not connected'));
+                return;
+            }
+
+            this.checkCancelled();
+
+            this.sftp.readFile(path, (err: any, data: Buffer) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(data);
             });
         });
     }

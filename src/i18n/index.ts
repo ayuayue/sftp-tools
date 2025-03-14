@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 
 const zh = {
+    home: {
+        isActive: 'SFTP Tools 扩展正在激活...',
+        isReady : 'SFTP Tools 扩展已准备就绪。'
+    },
     view: {
         servers: 'SFTP 服务器',
         explorer: '文件浏览器'
@@ -96,6 +100,10 @@ const zh = {
 };
 
 const en = {
+    home: {
+        isActive: 'SFTP Tools extension is activating...',
+        isReady : 'SFTP Tools extension is ready to use.'
+    },
     view: {
         servers: 'SFTP Servers',
         explorer: 'File Explorer'

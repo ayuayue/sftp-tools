@@ -5,6 +5,7 @@ import { SftpServersProvider, SftpExplorerProvider } from './sftpViewProvider';
 import { SettingsEditorProvider } from './settingsEditor';
 import { ServerItem } from './sftpViewProvider';
 import { getLocaleText } from './i18n';
+import { Logger } from './utils/logger';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -15,12 +16,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 创建输出通道
 	const outputChannel = vscode.window.createOutputChannel('SFTP Tools');
-	const log = (message: string) => {
-		const timestamp = new Date().toLocaleTimeString();
-		outputChannel.appendLine(`[${timestamp}] [INFO] ${message}`);
-	};
+	const logger = Logger.getInstance();
 
-	log('SFTP Tools extension is activating...');
+	// 获取 Logger 实例并显示欢迎信息
+	logger.showWelcome();
 
 	// 创建设置编辑器提供程序
 	const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri);
@@ -40,8 +39,6 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.window.registerTreeDataProvider('sftp-tools-servers', sftpServersProvider);
 	vscode.window.registerTreeDataProvider('sftp-tools-explorer', sftpExplorerProvider);
 
-	// 移除 showMessage 函数和调用
-	log('SFTP Tools extension is ready!');
 	outputChannel.show(true);
 
 	// 注册命令
@@ -56,7 +53,7 @@ export function activate(context: vscode.ExtensionContext) {
 			Object.values(servers).forEach((server: any) => {
 				outputChannel.appendLine(`  * ${server.name} (${server.host}:${server.port})`);
 			});
-			log(`SFTP Tools Info: ${Object.keys(servers).length} servers configured. Check Output for details.`);
+			logger.log(`SFTP Tools Info: ${Object.keys(servers).length} servers configured. Check Output for details.`);
 			outputChannel.show(true);
 		}),
 
@@ -78,9 +75,18 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('sftp-tools.openFile', (item) => {
 			sftpExplorerProvider.openFile(item, false);
 		}),
-		vscode.commands.registerCommand('sftp-tools.uploadFile', async () => {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) {
+		vscode.commands.registerCommand('sftp-tools.uploadFile', async (uri?: vscode.Uri) => {
+			// 如果命令是从资源管理器触发的，会传入 uri 参数
+			if (!uri) {
+				// 如果没有传入 uri，尝试从活动编辑器获取
+				const editor = vscode.window.activeTextEditor;
+				if (editor) {
+					uri = editor.document.uri;
+				}
+			}
+
+			if (!uri) {
+				vscode.window.showErrorMessage('没有选择要上传的文件');
 				return;
 			}
 
@@ -107,12 +113,18 @@ export function activate(context: vscode.ExtensionContext) {
 				);
 				
 				if (answer === '选择服务器') {
-					vscode.commands.executeCommand('sftp-tools.uploadToServer');
+					vscode.commands.executeCommand('sftp-tools.uploadToServer', uri);
 				}
 				return;
 			}
 
-			await sftpExplorerProvider.uploadToServer(editor.document, currentServer);
+			// 读取文件内容并上传
+			try {
+				const content = await vscode.workspace.fs.readFile(uri);
+				await sftpExplorerProvider.uploadFileContent(uri, content, currentServer);
+			} catch (error: any) {
+				vscode.window.showErrorMessage(`上传失败: ${error.message}`);
+			}
 		}),
 		vscode.commands.registerCommand('sftp-tools.openFileNonPreview', (item) => {
 			sftpExplorerProvider.openFile(item, true);
