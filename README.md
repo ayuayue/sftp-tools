@@ -1,6 +1,8 @@
 # SFTP Tools
 
-一个功能强大的 VS Code SFTP/FTP 客户端扩展，提供直观的界面和便捷的文件管理功能。
+[English](README_EN.md) | 简体中文
+
+SFTP Tools 是一个用于在 VS Code 中管理远程服务器文件的扩展。
 
 ## 功能特点
 
