@@ -2,7 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { SftpServersProvider, SftpExplorerProvider } from './sftpViewProvider';
-import { SettingsEditorProvider } from './settingsEditor';
+import { SettingsEditor } from './settingsEditor';
 import { ServerItem } from './sftpViewProvider';
 import { getLocaleText } from './i18n';
 import { Logger } from './utils/logger';
@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
 	logger.showWelcome();
 
 	// 创建设置编辑器提供程序
-	const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri);
+	const settingsEditorProvider = new SettingsEditor(context.extensionUri);
 
 	// 先注册设置编辑器命令
 	context.subscriptions.push(
@@ -303,6 +303,9 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('sftp-tools.settingsUpdated', (servers) => {
 			// 通知设置编辑器配置已更新
 			settingsEditorProvider.notifySettingsUpdated(servers);
+		}),
+		vscode.commands.registerCommand('sftp-tools.updateOtherSetting', async (setting: string, value: any) => {
+			settingsEditorProvider.updateSettings({ [setting]: value });
 		})
 	);
 

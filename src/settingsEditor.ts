@@ -1,293 +1,375 @@
-import * as vscode from 'vscode';
-import { ServerItem } from './sftpViewProvider';
-import path from 'path';
-import { getLocaleText } from './i18n';
-import * as fs from 'fs';
-import { join } from 'path';
-import { fileURLToPath } from 'url';
+import * as vscode from "vscode";
+import { ServerItem } from "./sftpViewProvider";
+import path from "path";
+import { getLocaleText } from "./i18n";
+import * as fs from "fs";
+import { join } from "path";
+import { fileURLToPath } from "url";
+import { WorkspaceConfig } from "./types";
 
 // 定义 ServerConfig 接口
 interface ServerConfig {
-    name: string;
-    host: string;
-    port: number;
-    username: string;
-    password?: string;
-    privateKeyPath?: string;
-    passphrase?: string;
-    remotePath: string;
-    workspacePath: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKeyPath?: string;
+  passphrase?: string;
+  remotePath: string;
+  workspacePath: string;
 }
 
 declare global {
-    interface Window {
-        acquireVsCodeApi(): any;
-    }
+  interface Window {
+    acquireVsCodeApi(): any;
+  }
 }
 
 // 配置文件名
-const CONFIG_FILE_NAME = 'sftp-tools.json';
+const CONFIG_FILE_NAME = "sftp-tools.json";
 
-export class SettingsEditorProvider {
-    public static readonly viewType = 'sftp-tools.settingsEditor';
-    private _view?: vscode.WebviewPanel;
-    private configFilePath: string = '';
-
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-    ) {
-        this.initConfigFilePath();
+export class SettingsEditor {
+  private config: WorkspaceConfig = {
+    servers: [],
+    settings: {
+      showConfirmDialog: true,
+      uploadOrDeleteBackup: ''
     }
+  };
 
-    private initConfigFilePath() {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) {
-            vscode.window.showErrorMessage('未找到工作区文件夹，请确保打开了一个工作区。');
-            return;
+  public static readonly viewType = "sftp-tools.settingsEditor";
+  private _view?: vscode.WebviewPanel;
+  private configFilePath: string = "";
+
+  constructor(private readonly _extensionUri?: vscode.Uri) {
+    this.initConfigFilePath();
+    this.initConfig();
+  }
+
+  private initConfig() {
+    try {
+      // 1. 先从 VSCode 配置中读取现有设置
+      const vscodeConfig = vscode.workspace.getConfiguration('sftp-tools');
+      const showConfirmDialog = vscodeConfig.get('showConfirmDialog', true);
+      const uploadOrDeleteBackup = vscodeConfig.get('uploadOrDeleteBackup', '');
+
+      // 2. 初始化默认配置
+      this.config = {
+        servers: [],
+        settings: {
+          showConfirmDialog,
+          uploadOrDeleteBackup
         }
-        // 创建 .vscode 文件夹（如果不存在）
-        const vscodePath = path.join(workspaceFolder.uri.fsPath, '.vscode');
-        if (!fs.existsSync(vscodePath)) {
-            fs.mkdirSync(vscodePath, { recursive: true });
-        }
-        this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
-        // 检查是否需要迁移旧版本配置
-        this.migrateFromOldConfig();
+      };
+
+      // 3. 尝试从文件加载配置
+      const configPath = this.getConfigPath();
+      if (fs.existsSync(configPath)) {
+        const content = fs.readFileSync(configPath, 'utf8');
+        const loadedConfig = JSON.parse(content);
+        // 合并配置，保留已有设置
+        this.config = {
+          servers: loadedConfig.servers || [],
+          settings: {
+            ...this.config.settings,
+            ...loadedConfig.settings
+          }
+        };
+      }
+
+      // 4. 保存配置到文件
+      this.saveConfig();
+
+      // 5. 清除 VSCode 配置中的设置
+      vscodeConfig.update('showConfirmDialog', undefined, true);
+      vscodeConfig.update('uploadOrDeleteBackup', undefined, true);
+      vscodeConfig.update('useGlobalConfig', undefined, true);
+
+    } catch (error) {
+      console.error('Failed to initialize config:', error);
     }
+  }
 
-    // 从旧版本配置迁移
-    private migrateFromOldConfig(): void {
-        try {
-            // 如果新配置文件已经存在，则不进行迁移
-            if (fs.existsSync(this.configFilePath)) {
-                return;
-            }
-            
-            // 获取旧版本配置
-            const config = vscode.workspace.getConfiguration('sftp-tools');
-            const oldServers = config.get('servers');
-            
-            // 如果存在旧配置，则迁移
-            if (oldServers && Array.isArray(oldServers) && oldServers.length > 0) {
-                console.log('Migrating old sftp-tools configuration...');
-                
-                // 保存到新配置文件
-                this.saveServersToFile(oldServers);
-                
-                // 显示迁移成功消息
-                vscode.window.showInformationMessage(
-                    getLocaleText().status.configMigrated || 
-                    '已成功将旧版配置迁移到新版格式。'
-                );
-                vscode.commands.executeCommand('sftp-tools.refreshServers');
-                vscode.workspace.getConfiguration('sftp-tools').update('servers', []);
-            }
-        } catch (error) {
-            console.error('Failed to migrate configuration:', error);
-        }
+  private initConfigFilePath() {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showErrorMessage(
+        "未找到工作区文件夹，请确保打开了一个工作区。"
+      );
+      return;
     }
-
-    // 从文件加载服务器配置
-    private loadServersFromFile(): ServerConfig[] {
-        try {
-            if (this.configFilePath && fs.existsSync(this.configFilePath)) {
-                const configContent = fs.readFileSync(this.configFilePath, 'utf8');
-                const servers = JSON.parse(configContent).servers || [];
-                // 确保每个服务器对象都包含必要的字段
-                return servers.map((server: any) => ({
-                    name: server.name || '',
-                    host: server.host || '',
-                    port: server.port || 22,
-                    username: server.username || '',
-                    password: server.password || undefined,
-                    privateKeyPath: server.privateKeyPath || undefined,
-                    passphrase: server.passphrase || undefined,
-                    workspacePath: server.workspacePath || '/',
-                    remotePath: server.remotePath || '/'
-                }));
-            }
-        } catch (error: any) {
-            vscode.window.showErrorMessage('加载配置失败: ' + error.message);
-        }
-        return [];
+    // 创建 .vscode 文件夹（如果不存在）
+    const vscodePath = path.join(workspaceFolder.uri.fsPath, ".vscode");
+    if (!fs.existsSync(vscodePath)) {
+      fs.mkdirSync(vscodePath, { recursive: true });
     }
+    this.configFilePath = path.join(vscodePath, CONFIG_FILE_NAME);
+    // 检查是否需要迁移旧版本配置
+    this.migrateFromOldConfig();
+  }
 
-    // 将服务器配置保存到文件
-    private saveServersToFile(servers: ServerConfig[]): boolean {
-        try {
-            if (this.configFilePath) {
-                const configData = { servers };
-                fs.writeFileSync(this.configFilePath, JSON.stringify(configData, null, 2), 'utf8');
-                return true;
-            }
-        } catch (error: any) {
-            vscode.window.showErrorMessage('保存配置失败: ' + error.message);
-        }
-        return false;
-    }
+  // 从旧版本配置迁移
+  private migrateFromOldConfig(): void {
+    try {
+      // 如果新配置文件已经存在，则不进行迁移
+      if (fs.existsSync(this.configFilePath)) {
+        return;
+      }
 
-    public async showSettingsEditor(serverToEdit?: ServerItem) {
-        if (this._view) {
-            this._view.reveal(vscode.ViewColumn.One);
-            return;
-        }
+      // 获取旧版本配置
+      const config = vscode.workspace.getConfiguration("sftp-tools");
+      const oldServers = config.get("servers");
 
-        this._view = vscode.window.createWebviewPanel(
-            'sftpSettings',
-            'SFTP Tools Settings',
-            vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-                localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'out'), vscode.Uri.joinPath(this._extensionUri, 'src', 'webview')],
-            }
+      // 如果存在旧配置，则迁移
+      if (oldServers && Array.isArray(oldServers) && oldServers.length > 0) {
+        console.log("Migrating old sftp-tools configuration...");
+
+        // 保存到新配置文件
+        this.saveServersToFile(oldServers);
+
+        // 显示迁移成功消息
+        vscode.window.showInformationMessage(
+          getLocaleText().status.configMigrated ||
+            "已成功将旧版配置迁移到新版格式。"
         );
+        vscode.commands.executeCommand("sftp-tools.refreshServers");
+        vscode.workspace.getConfiguration("sftp-tools").update("servers", []);
+      }
+    } catch (error) {
+      console.error("Failed to migrate configuration:", error);
+    }
+  }
 
-        const servers = this.loadServersFromFile();
-        this._view.webview.html = this.getWebviewContent();
-        
-        setTimeout(() => {
-            this._view?.webview.postMessage({ command: 'loadSettings', servers, serverToEdit });
-        }, 100);
+  // 从文件加载服务器配置
+  private loadServersFromFile(): ServerConfig[] {
+    try {
+      if (this.configFilePath && fs.existsSync(this.configFilePath)) {
+        const configContent = fs.readFileSync(this.configFilePath, "utf8");
+        const servers = JSON.parse(configContent).servers || [];
+        // 确保每个服务器对象都包含必要的字段
+        return servers.map((server: any) => ({
+          name: server.name || "",
+          host: server.host || "",
+          port: server.port || 22,
+          username: server.username || "",
+          password: server.password || undefined,
+          privateKeyPath: server.privateKeyPath || undefined,
+          passphrase: server.passphrase || undefined,
+          workspacePath: server.workspacePath || "/",
+          remotePath: server.remotePath || "/",
+        }));
+      }
+    } catch (error: any) {
+      vscode.window.showErrorMessage("加载配置失败: " + error.message);
+    }
+    return [];
+  }
 
-        this._view.onDidDispose(() => {
-            this._view = undefined;
-        });
+  // 将服务器配置保存到文件
+  private saveServersToFile(servers: ServerConfig[]): boolean {
+    try {
+      if (this.configFilePath) {
+        const configData = { servers };
+        fs.writeFileSync(
+          this.configFilePath,
+          JSON.stringify(configData, null, 2),
+          "utf8"
+        );
+        return true;
+      }
+    } catch (error: any) {
+      vscode.window.showErrorMessage("保存配置失败: " + error.message);
+    }
+    return false;
+  }
 
-        this._view.webview.onDidReceiveMessage(async (message) => {
-            try {
-                switch (message.command) {
-                    case 'loadSettings':
-                        let servers;
-                        try {
-                            servers = message.servers; // 解析 JSON 字符串为数组
-                        } catch (error: any) {
-                            throw new Error('解析服务器配置失败: ' + error.message);
-                        }
-                        if (!Array.isArray(JSON.parse(servers))) {
-                            throw new Error('服务器配置无效，必须是数组');
-                        }
-                        if (this._view) {
-                            this._view.webview.postMessage({
-                                command: 'saveSettings',
-                                servers: JSON.stringify(servers)
-                            });
-                        }
-                        console.log('Received servers:', message.servers);
-                        break;
-                    case 'saveSettings':
-                        try {
-                            const servers = message.servers; // 解析 JSON 字符串为数组
-                            if (!Array.isArray(servers)) {
-                                throw new Error('服务器配置无效，必须是数组');
-                            }
-                            // 验证密钥文件配置
-                            for (let i = 0; i < servers.length; i++) {
-                                const server = servers[i];
-                                if (!server.password && !server.privateKeyPath) {
-                                    throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
-                                }
-                            }
-                            if (this.saveServersToFile(servers)) {
-                                vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
-                                vscode.commands.executeCommand('sftp-tools.refreshServers');
-                                vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
-                            } else {
-                                vscode.window.showErrorMessage(getLocaleText().messages.settingsSaveFailed);
-                            }
-                        } catch (error: any) {
-                            vscode.window.showErrorMessage(`保存失败: ${error.message}`);
-                        }
-                        break;
-                    case 'selectKeyFile':
-                        try {
-                            const result = await vscode.window.showOpenDialog({
-                                canSelectFiles: true,
-                                canSelectFolders: false,
-                                canSelectMany: false,
-                                title: getLocaleText().settings.selectPrivateKey,
-                                filters: {
-                                    'All files': ['*']
-                                }
-                            });
-                            
-                            if (result && result.length > 0) {
-                                const path = result[0].fsPath;
-                                // 发送选择的文件路径回 webview
-                                this._view?.webview.postMessage({
-                                    command: 'keyFileSelected',
-                                    index: message.index,
-                                    path: path
-                                });
-                            }
-                        } catch (error: any) {
-                            vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
-                        }
-                        break;
-                    case 'confirmDelete':
-                        const i18n = getLocaleText();
-                        const answer = await vscode.window.showWarningMessage(
-                            i18n.settings.deleteConfirm,
-                            i18n.settings.yes,
-                            i18n.settings.no
-                        );
-                        if (answer === i18n.settings.yes) {
-                            // 用户确认删除，通知 webview
-                            this._view?.webview.postMessage({
-                                command: 'deleteConfirmed',
-                                index: message.index
-                            });
-                        }
-                        break;
-                    case 'deleteConfirmed':
-                        this.removeServer(message.index);
-                        break;
-                    case 'updateOtherSetting':
-                        await vscode.workspace.getConfiguration('sftp-tools').update(
-                            message.setting,
-                            message.value,
-                            vscode.ConfigurationTarget.Global
-                        );
-                        vscode.commands.executeCommand('sftp-tools.refreshServers');
-                        break;
-                    default:
-                        const errorAnswer = await vscode.window.showWarningMessage(
-                            'Invalid command received. Please check your input.',
-                            'OK'
-                        );
-                        this._view?.webview.postMessage({ command: 'error', message: errorAnswer });
-                }
-            } catch (error) {
-                vscode.window.showErrorMessage('Failed to save settings');
-            }
-        });
+  public async showSettingsEditor(serverToEdit?: ServerItem) {
+    if (this._view) {
+      this._view.reveal(vscode.ViewColumn.One);
+      return;
     }
 
-    private getWebviewContent(): string {
-        const i18n = getLocaleText();
-        const nonce = getNonce();
-        const serversJson = JSON.stringify(this.loadServersFromFile());
-        
-        // 读取全局配置
-        const config = vscode.workspace.getConfiguration('sftp-tools');
-        const showDeleteConfirm = config.get('showConfirmDialog', true);
-        
-        // 修改 CSP 策略
-        const csp = `
+    // 检查 _extensionUri 是否存在
+    if (!this._extensionUri) {
+        throw new Error('Extension URI is not available');
+    }
+
+    this._view = vscode.window.createWebviewPanel(
+      "sftpSettings",
+      "SFTP Tools Settings",
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [
+          vscode.Uri.joinPath(this._extensionUri!, "out"),
+          vscode.Uri.joinPath(this._extensionUri!, "src", "webview"),
+        ],
+      }
+    );
+
+    const servers = this.loadServersFromFile();
+    this._view.webview.html = this.getWebviewContent();
+
+    setTimeout(() => {
+      this._view?.webview.postMessage({
+        command: "loadSettings",
+        servers,
+        serverToEdit,
+      });
+    }, 100);
+
+    this._view.onDidDispose(() => {
+      this._view = undefined;
+    });
+
+    this._view.webview.onDidReceiveMessage(async (message) => {
+      try {
+        switch (message.command) {
+          case "loadSettings":
+            let servers;
+            try {
+              servers = message.servers; // 解析 JSON 字符串为数组
+            } catch (error: any) {
+              throw new Error("解析服务器配置失败: " + error.message);
+            }
+            if (!Array.isArray(JSON.parse(servers))) {
+              throw new Error("服务器配置无效，必须是数组");
+            }
+            if (this._view) {
+              this._view.webview.postMessage({
+                command: "saveSettings",
+                servers: JSON.stringify(servers),
+              });
+            }
+            console.log("Received servers:", message.servers);
+            break;
+          case "saveSettings":
+            try {
+              const servers = message.servers; // 解析 JSON 字符串为数组
+              if (!Array.isArray(servers)) {
+                throw new Error("服务器配置无效，必须是数组");
+              }
+              // 验证密钥文件配置
+              for (let i = 0; i < servers.length; i++) {
+                const server = servers[i];
+                if (!server.password && !server.privateKeyPath) {
+                  throw new Error(
+                    `服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`
+                  );
+                }
+              }
+              this.saveServersToFile(servers);
+              vscode.commands.executeCommand(
+                "sftp-tools.disconnectAllServers"
+              );
+              vscode.commands.executeCommand("sftp-tools.refreshServers");
+              vscode.window.showInformationMessage(
+                getLocaleText().status.settingsSaved
+              );
+            } catch (error: any) {
+              vscode.window.showErrorMessage(`保存失败: ${error.message}`);
+            }
+            break;
+          case "selectKeyFile":
+            try {
+              const result = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                title: getLocaleText().settings.selectPrivateKey,
+                filters: {
+                  "All files": ["*"],
+                },
+              });
+
+              if (result && result.length > 0) {
+                const path = result[0].fsPath;
+                // 发送选择的文件路径回 webview
+                this._view?.webview.postMessage({
+                  command: "keyFileSelected",
+                  index: message.index,
+                  path: path,
+                });
+              }
+            } catch (error: any) {
+              vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
+            }
+            break;
+          case "confirmDelete":
+            const i18n = getLocaleText();
+            const answer = await vscode.window.showWarningMessage(
+              i18n.settings.deleteConfirm,
+              i18n.settings.yes,
+              i18n.settings.no
+            );
+            if (answer === i18n.settings.yes) {
+              // 用户确认删除，通知 webview
+              this._view?.webview.postMessage({
+                command: "deleteConfirmed",
+                index: message.index,
+              });
+            }
+            break;
+          case "deleteConfirmed":
+            this.removeServer(message.index);
+            break;
+          case "updateOtherSetting":
+            try {
+                // 更新我们的配置系统
+                this.updateSettings({ [message.setting]: message.value });
+                vscode.commands.executeCommand("sftp-tools.refreshServers");
+                vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
+            } catch (error: any) {
+                vscode.window.showErrorMessage(getLocaleText().messages.settingsSaveFailed);
+            }
+            break;
+          default:
+            const errorAnswer = await vscode.window.showWarningMessage(
+              "Invalid command received. Please check your input.",
+              "OK"
+            );
+            this._view?.webview.postMessage({
+              command: "error",
+              message: errorAnswer,
+            });
+        }
+      } catch (error: any) {
+        vscode.window.showErrorMessage("Failed to save settings" + error.message);
+      }
+    });
+  }
+
+  private getWebviewContent(): string {
+    const i18n = getLocaleText();
+    const nonce = getNonce();
+    const serversJson = JSON.stringify(this.loadServersFromFile());
+
+    // 读取全局配置
+    const config = vscode.workspace.getConfiguration("sftp-tools");
+    const showDeleteConfirm = config.get("showConfirmDialog", true);
+    const uploadOrDeleteBackup = config.get("uploadOrDeleteBackup", "");
+
+    // 修改 CSP 策略
+    const csp = `
             default-src 'none';
             style-src 'unsafe-inline';
             script-src 'nonce-${nonce}';
             frame-src 'none';
             sandbox allow-scripts;
         `;
-        
-        const htmlContent = `
+
+    const htmlContent = `
         <!DOCTYPE html>
         <html lang="zh-cn">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="Content-Security-Policy" content="${csp.replace(/\s+/g, ' ')}">
+            <meta http-equiv="Content-Security-Policy" content="${csp.replace(
+              /\s+/g,
+              " "
+            )}">
             <title>${i18n.settings.title}</title>
             <style>
                 :root {
@@ -685,8 +767,12 @@ export class SettingsEditorProvider {
                 </div>
                 
                 <div class="settings-tab-bar">
-                    <div class="settings-tab active" data-tab="servers">${i18n.settings.serverSettings}</div>
-                    <div class="settings-tab" data-tab="other">${i18n.settings.otherSettings}</div>
+                    <div class="settings-tab active" data-tab="servers">${
+                      i18n.settings.serverSettings
+                    }</div>
+                    <div class="settings-tab" data-tab="other">${
+                      i18n.settings.otherSettings
+                    }</div>
                 </div>
                 
                 <div class="content-container" style="flex: 1; overflow: hidden;">
@@ -694,7 +780,9 @@ export class SettingsEditorProvider {
                     <!-- 服务器设置面板 -->
                     <div id="serversSettingsPanel" class="settings-panel active" style="height: 100%;">
                         <div class="sidebar">
-                            <div class="sidebar-header">${i18n.view.servers}</div>
+                            <div class="sidebar-header">${
+                              i18n.view.servers
+                            }</div>
                             <ul class="server-nav" id="serverNav"></ul>
                             <div class="sidebar-footer" style="margin-top: auto;">
                                 <button id="addServerBtn" class="add-server-btn">
@@ -727,11 +815,29 @@ export class SettingsEditorProvider {
                         <div class="setting-item">
                             <div class="setting-item-label">
                                 <div>${i18n.settings.showDeleteConfirm}</div>
-                                <div class="setting-item-description">${i18n.settings.showDeleteConfirmDesc}</div>
+                                <div class="setting-item-description">${
+                                  i18n.settings.showDeleteConfirmDesc
+                                }</div>
                             </div>
                             <label class="toggle-switch">
-                                <input type="checkbox" id="showDeleteConfirmToggle" ${showDeleteConfirm ? 'checked' : ''}>
+                                <input type="checkbox" id="showDeleteConfirmToggle" ${
+                                  showDeleteConfirm ? "checked" : ""
+                                }>
                                 <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-item-label">
+                                <div>${i18n.settings.uploadOrDeleteBackup}</div>
+                                <div class="setting-item-description">${
+                                  i18n.settings.uploadOrDeleteBackupDesc
+                                }</div>
+                            </div>
+                            <label class="">
+                                <input type="text" id="uploadOrDeleteBackupToggle" value="${
+                                  uploadOrDeleteBackup
+                                }">
+                                
                             </label>
                         </div>
                     </div>
@@ -788,6 +894,16 @@ export class SettingsEditorProvider {
                         value: showDeleteConfirm
                     });
                 });
+
+                // 上传或删除备份
+                document.getElementById('uploadOrDeleteBackupToggle').addEventListener('change', (e) => {
+                    uploadOrDeleteBackup = e.target.value;
+                    vscode.postMessage({
+                        command: 'updateOtherSetting',
+                        setting: 'uploadOrDeleteBackup',
+                        value: uploadOrDeleteBackup
+                    });
+                });
                 
                 // 选项卡切换
                 document.querySelectorAll('.settings-tab').forEach(tab => {
@@ -823,7 +939,9 @@ export class SettingsEditorProvider {
                         li.dataset.index = String(index);
                         li.innerHTML = \`
                             <span class="server-nav-item-icon">🖥️</span>
-                            <span class="server-nav-item-name">\${server.name || '${i18n.settings.enterServerName}'}</span>
+                            <span class="server-nav-item-name">\${server.name || '${
+                              i18n.settings.enterServerName
+                            }'}</span>
                         \`;
                         li.addEventListener('click', () => {
                             activeServerIndex = index;
@@ -857,28 +975,42 @@ export class SettingsEditorProvider {
                     return \`
                         <div class="server-item">
                             <div class="box-section">
-                                <div class="box-header">${i18n.settings.serverName}</div>
+                                <div class="box-header">${
+                                  i18n.settings.serverName
+                                }</div>
                                 <div class="form-group">
-                                    <input type="text" class="server-name-input" style="width: 100%;" value="\${server.name || ''}" data-index="\${index}" data-field="name" placeholder="${i18n.settings.enterServerName}">
+                                    <input type="text" class="server-name-input" style="width: 100%;" value="\${server.name || ''}" data-index="\${index}" data-field="name" placeholder="${
+                                      i18n.settings.enterServerName
+                                    }">
                                 </div>
                             </div>
                             <div class="box-section">
-                                <div class="box-header">${i18n.settings.host}</div>
+                                <div class="box-header">${
+                                  i18n.settings.host
+                                }</div>
                                 <div class="form-group">
                                     <label>${i18n.settings.host}:</label>
-                                    <input type="text" value="\${server.host || ''}" data-index="\${index}" data-field="host" placeholder="${i18n.settings.enterHost}">
+                                    <input type="text" value="\${server.host || ''}" data-index="\${index}" data-field="host" placeholder="${
+                                      i18n.settings.enterHost
+                                    }">
                                 </div>
                                 <div class="form-group">
                                     <label>${i18n.settings.port}:</label>
-                                    <input type="number" value="\${server.port || 22}" data-index="\${index}" data-field="port" placeholder="${i18n.settings.enterPort}">
+                                    <input type="number" value="\${server.port || 22}" data-index="\${index}" data-field="port" placeholder="${
+                                      i18n.settings.enterPort
+                                    }">
                                 </div>
                                 <div class="form-group">
                                     <label>${i18n.settings.username}:</label>
-                                    <input type="text" value="\${server.username || ''}" data-index="\${index}" data-field="username" placeholder="${i18n.settings.enterUsername}">
+                                    <input type="text" value="\${server.username || ''}" data-index="\${index}" data-field="username" placeholder="${
+                                      i18n.settings.enterUsername
+                                    }">
                                 </div>
                             </div>
                             <div class="box-section">
-                                <div class="box-header">${i18n.settings.authType}</div>
+                                <div class="box-header">${
+                                  i18n.settings.authType
+                                }</div>
                                 <div class="auth-options">
                                     <div class="auth-option \${!server.privateKeyPath ? 'active' : ''}" data-auth="password" data-index="\${index}">
                                         ${i18n.settings.authPassword}
@@ -889,29 +1021,43 @@ export class SettingsEditorProvider {
                                 </div>
                                 <div class="form-group password-group" style="display: \${!server.privateKeyPath ? '' : 'none'};">
                                     <label>${i18n.settings.password}:</label>
-                                    <input type="password" value="\${server.password || ''}" data-index="\${index}" data-field="password" placeholder="${i18n.settings.enterPassword}">
+                                    <input type="password" value="\${server.password || ''}" data-index="\${index}" data-field="password" placeholder="${
+                                      i18n.settings.enterPassword
+                                    }">
                                 </div>
                                 <div class="form-group key-group" style="display: \${server.privateKeyPath ? '' : 'none'};">
                                     <label>${i18n.settings.privateKey}:</label>
                                     <div class="key-file-selector">
-                                        <input type="text" value="\${server.privateKeyPath || ''}" data-index="\${index}" data-field="privateKeyPath" placeholder="${i18n.settings.enterPrivateKeyPath}">
-                                        <button class="select-key-file-btn" data-index="\${index}">${i18n.settings.selectPrivateKey}</button>
+                                        <input type="text" value="\${server.privateKeyPath || ''}" data-index="\${index}" data-field="privateKeyPath" placeholder="${
+                                          i18n.settings.enterPrivateKeyPath
+                                        }">
+                                        <button class="select-key-file-btn" data-index="\${index}">${
+                                          i18n.settings.selectPrivateKey
+                                        }</button>
                                     </div>
                                 </div>
                                 <div class="form-group passphrase-group" style="display: \${server.privateKeyPath ? '' : 'none'};">
                                     <label>${i18n.settings.passphrase}:</label>
-                                    <input type="password" value="\${server.passphrase || ''}" data-index="\${index}" data-field="passphrase" placeholder="${i18n.settings.enterPassphrase}">
+                                    <input type="password" value="\${server.passphrase || ''}" data-index="\${index}" data-field="passphrase" placeholder="${
+                                      i18n.settings.enterPassphrase
+                                    }">
                                 </div>
                             </div>
                             <div class="box-section">
-                                <div class="box-header">${i18n.settings.paths}</div>
+                                <div class="box-header">${
+                                  i18n.settings.paths
+                                }</div>
                                 <div class="form-group">
                                     <label>${i18n.settings.localPath}:</label>
-                                    <input type="text" value="\${server.localPath || '/'}" data-index="\${index}" data-field="localPath" placeholder="${i18n.settings.enterLocalPath}" onpaste="return true;">
+                                    <input type="text" value="\${server.localPath || '/'}" data-index="\${index}" data-field="localPath" placeholder="${
+                                      i18n.settings.enterLocalPath
+                                    }" onpaste="return true;">
                                 </div>
                                 <div class="form-group">
                                     <label>${i18n.settings.remotePath}:</label>
-                                    <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="${i18n.settings.enterRemotePath}" onpaste="return true;">
+                                    <input type="text" value="\${server.remotePath || '/'}" data-index="\${index}" data-field="remotePath" placeholder="${
+                                      i18n.settings.enterRemotePath
+                                    }" onpaste="return true;">
                                 </div>
                             </div>
                             <div class="actions" style="margin-top: auto;">
@@ -979,7 +1125,9 @@ export class SettingsEditorProvider {
                             if (field === 'name') {
                                 const navItem = document.querySelector('.server-nav-item[data-index="' + String(index) + '"] .server-nav-item-name');
                                 if (navItem) {
-                                    navItem.textContent = value || '${i18n.settings.enterServerName}';
+                                    navItem.textContent = value || '${
+                                      i18n.settings.enterServerName
+                                    }';
                                 }
                             }
                         });
@@ -1076,123 +1224,179 @@ export class SettingsEditorProvider {
             </script>
         </body>
         </html>`;
-        return htmlContent;
-    }
+    return htmlContent;
+  }
 
-    public async handleMessage(message: any) {
-        switch (message.command) {
-            case 'updateSetting':
-                await vscode.workspace.getConfiguration('sftp-tools').update(
-                    message.setting,
-                    message.value,
-                    vscode.ConfigurationTarget.Global
-                );
-                vscode.commands.executeCommand('sftp-tools.refreshServers');
-                break;
-            case 'saveSettings':
-                try {
-                    const servers = JSON.parse(message.servers); // 解析 JSON 字符串为数组
-                    if (!Array.isArray(servers)) {
-                        throw new Error('服务器配置无效，必须是数组');
-                    }
-                    // 验证密钥文件配置
-                    for (let i = 0; i < servers.length; i++) {
-                        const server = servers[i];
-                        if (!server.password && !server.privateKeyPath) {
-                            throw new Error(`服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`);
-                        }
-                    }
-                    this.saveServersToFile(servers);
-                    vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
-                    vscode.commands.executeCommand('sftp-tools.refreshServers');
-                    vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
-                } catch (error: any) {
-                    vscode.window.showErrorMessage(`保存失败: ${error.message}`);
-                }
-                break;
-            case 'selectKeyFile':
-                try {
-                    const result = await vscode.window.showOpenDialog({
-                        canSelectFiles: true,
-                        canSelectFolders: false,
-                        canSelectMany: false,
-                        title: getLocaleText().settings.selectPrivateKey,
-                        filters: {
-                            'All files': ['*']
-                        }
-                    });
-                    
-                    if (result && result.length > 0) {
-                        const path = result[0].fsPath;
-                        this._view?.webview.postMessage({
-                            command: 'keyFileSelected',
-                            index: message.index,
-                            path: path
-                        });
-                        // 更新服务器配置
-                        this._view?.webview.postMessage({
-                            command: 'updateServer',
-                            index: message.index,
-                            field: 'privateKeyPath',
-                            value: path
-                        });
-                    }
-                } catch (error: any) {
-                    vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
-                }
-                break;
-            case 'updateOtherSetting':
-                try {
-                    const config = vscode.workspace.getConfiguration('sftp-tools');
-                    await config.update(message.setting, message.value, vscode.ConfigurationTarget.Global);
-                    vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
-                } catch (error: any) {
-                    vscode.window.showErrorMessage(`保存失败: ${error.message}`);
-                }
-                break;
-            case 'confirmDelete':
-                const i18n = getLocaleText();
-                const answer = await vscode.window.showWarningMessage(
-                    i18n.settings.deleteConfirm,
-                    i18n.settings.yes,
-                    i18n.settings.no
-                );
-                if (answer === i18n.settings.yes) {
-                    // 用户确认删除，通知 webview
-                    this._view?.webview.postMessage({
-                        command: 'deleteConfirmed',
-                        index: message.index
-                    });
-                }
-                break;
+  public async handleMessage(message: any) {
+    switch (message.command) {
+      case "updateSetting":
+        await vscode.workspace
+          .getConfiguration("sftp-tools")
+          .update(
+            message.setting,
+            message.value,
+            vscode.ConfigurationTarget.Global
+          );
+        vscode.commands.executeCommand("sftp-tools.refreshServers");
+        break;
+      case "saveSettings":
+        try {
+          const servers = JSON.parse(message.servers); // 解析 JSON 字符串为数组
+          if (!Array.isArray(servers)) {
+            throw new Error("服务器配置无效，必须是数组");
+          }
+          // 验证密钥文件配置
+          for (let i = 0; i < servers.length; i++) {
+            const server = servers[i];
+            if (!server.password && !server.privateKeyPath) {
+              throw new Error(
+                `服务器 "${server.name}" 未配置认证信息，请配置密码或密钥文件`
+              );
+            }
+          }
+          this.saveServersToFile(servers);
+          vscode.commands.executeCommand("sftp-tools.disconnectAllServers");
+          vscode.commands.executeCommand("sftp-tools.refreshServers");
+          vscode.window.showInformationMessage(
+            getLocaleText().status.settingsSaved
+          );
+        } catch (error: any) {
+          vscode.window.showErrorMessage(`保存失败: ${error.message}`);
         }
-    }
+        break;
+      case "selectKeyFile":
+        try {
+          const result = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            title: getLocaleText().settings.selectPrivateKey,
+            filters: {
+              "All files": ["*"],
+            },
+          });
 
-    // 通知设置页面配置已更新
-    public notifySettingsUpdated(servers: any[]): void {
-        if (this._view) {
-            this._view.webview.postMessage({ 
-                command: 'loadSettings', 
-                servers 
+          if (result && result.length > 0) {
+            const path = result[0].fsPath;
+            this._view?.webview.postMessage({
+              command: "keyFileSelected",
+              index: message.index,
+              path: path,
             });
+            // 更新服务器配置
+            this._view?.webview.postMessage({
+              command: "updateServer",
+              index: message.index,
+              field: "privateKeyPath",
+              value: path,
+            });
+          }
+        } catch (error: any) {
+          vscode.window.showErrorMessage(`选择文件失败: ${error.message}`);
         }
+        break;
+      case "updateOtherSetting":
+        try {
+          // 更新我们的配置系统
+          this.updateSettings({ [message.setting]: message.value });
+          vscode.commands.executeCommand("sftp-tools.refreshServers");
+          vscode.window.showInformationMessage(getLocaleText().status.settingsSaved);
+        } catch (error: any) {
+          vscode.window.showErrorMessage(getLocaleText().messages.settingsSaveFailed);
+        }
+        break;
+      case "confirmDelete":
+        const i18n = getLocaleText();
+        const answer = await vscode.window.showWarningMessage(
+          i18n.settings.deleteConfirm,
+          i18n.settings.yes,
+          i18n.settings.no
+        );
+        if (answer === i18n.settings.yes) {
+          // 用户确认删除，通知 webview
+          this._view?.webview.postMessage({
+            command: "deleteConfirmed",
+            index: message.index,
+          });
+        }
+        break;
     }
+  }
 
-    // 从配置中删除服务器
-    private removeServer(index: number): void {
-        const servers = this.loadServersFromFile();
-        servers.splice(index, 1);
-        this.saveServersToFile(servers);
-        vscode.commands.executeCommand('sftp-tools.disconnectAllServers');
-        vscode.commands.executeCommand('sftp-tools.refreshServers');
+  // 通知设置页面配置已更新
+  public notifySettingsUpdated(servers: any[]): void {
+    if (this._view) {
+      this._view.webview.postMessage({
+        command: "loadSettings",
+        servers,
+      });
     }
+  }
+
+  // 从配置中删除服务器
+  private removeServer(index: number): void {
+    const servers = this.loadServersFromFile();
+    servers.splice(index, 1);
+    this.saveServersToFile(servers);
+    vscode.commands.executeCommand("sftp-tools.disconnectAllServers");
+    vscode.commands.executeCommand("sftp-tools.refreshServers");
+  }
+
+  private getConfigPath(): string {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error("未找到工作区文件夹，请确保打开了一个工作区。");
+    }
+    const vscodePath = path.join(workspaceFolder.uri.fsPath, ".vscode");
+    if (!fs.existsSync(vscodePath)) {
+      fs.mkdirSync(vscodePath, { recursive: true });
+    }
+    return path.join(vscodePath, CONFIG_FILE_NAME);
+  }
+
+  private saveConfig() {
+    try {
+        const configPath = this.getConfigPath();
+        fs.writeFileSync(configPath, JSON.stringify(this.config, null, 4));
+    } catch (error) {
+        throw new Error(getLocaleText().messages.settingsSaveFailed);
+    }
+  }
+
+  // 获取或设置其他设置
+  getSettings(): typeof this.config.settings {
+    try {
+      const configPath = this.getConfigPath();
+      if (fs.existsSync(configPath)) {
+        const content = fs.readFileSync(configPath, 'utf8');
+        const loadedConfig = JSON.parse(content);
+        // 更新内存中的配置
+        this.config = {
+          servers: loadedConfig.servers || [],
+          settings: {
+            showConfirmDialog: loadedConfig.settings?.showConfirmDialog ?? true,
+            uploadOrDeleteBackup: loadedConfig.settings?.uploadOrDeleteBackup ?? ''
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Failed to load config:', error);
+    }
+    return { ...this.config.settings };
+  }
+
+  updateSettings(settings: Partial<typeof this.config.settings>) {
+    this.config.settings = { ...this.config.settings, ...settings };
+    this.saveConfig();
+  }
 }
 
 function getNonce() {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-} 
+  let text = "";
+  const possible =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}

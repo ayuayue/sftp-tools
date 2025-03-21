@@ -35,5 +35,13 @@
     "commands.uploadDirectoryToServer": "Upload Directory to Other Server...",
     "commands.uploadDirectoryToAllServers": "Upload Directory to All Servers",
     "configuration.useGlobalConfig.description": "Use global configuration instead of workspace configuration",
-    "configuration.useGlobalConfig.markdownDescription": "When enabled, all workspaces will use the same global SFTP server configurations. Otherwise, each workspace has its own server configurations."
+    "configuration.useGlobalConfig.markdownDescription": "When enabled, all workspaces will use the same global SFTP server configurations. Otherwise, each workspace has its own server configurations.",
+    "messages.backupDirDelete": "This is a backup directory. Are you sure you want to delete it? To disable backup, you can set the backup path to empty in settings.",
+    "messages.backupDirDeleteConfirm": "Delete",
+    "messages.backupDirDeleteCancel": "Cancel",
+    "messages.backupDisabled": "Backup feature is disabled, skipping backup operation",
+    "messages.backupPathSet": "Backup path is set to: {0}",
+    "messages.directoryBackedUp": "Directory backed up to: {0}",
+    "messages.fileBackedUp": "File backed up to: {0}",
+    "messages.backupFailed": "Backup failed: {0}"
 } 

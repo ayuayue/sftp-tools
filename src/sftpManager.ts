@@ -1,9 +1,16 @@
 import * as ssh2 from 'ssh2';
+import * as path from 'path';
 
 export class SftpManager {
     private client: ssh2.Client | null = null;
     private sftp: ssh2.SFTPWrapper | null = null;
     private isCancelled: boolean = false;
+    private _backupPath: string = 'backup-sftp';
+
+    // 添加公共 getter
+    public get backupPath(): string {
+        return this._backupPath;
+    }
 
     cancelOperations() {
         this.isCancelled = true;
@@ -259,5 +266,118 @@ export class SftpManager {
                 resolve(data);
             });
         });
+    }
+
+    /**
+     * 备份远程文件
+     * @param remotePath 原始文件路径
+     * @param backupBasePath 备份基础路径
+     * @returns 备份后的文件路径
+     */
+    async backupFile(remotePath: string, backupBasePath: string): Promise<string> {
+        if (!this.sftp) {
+            throw new Error('SFTP not connected');
+        }
+
+        // 生成备份路径
+        const now = new Date();
+        const datePath = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
+        const timePath = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+        
+        // 构建备份目录路径
+        const backupDir = path.posix.join(
+            backupBasePath,
+            this._backupPath,
+            datePath
+        );
+
+        // 获取原始文件名
+        const fileName = path.basename(remotePath);
+        // 构建备份文件路径
+        const backupPath = path.posix.join(backupDir, `${fileName}.${timePath}`);
+
+        try {
+            // 创建备份目录
+            await this.mkdir(backupDir, true);
+
+            // 读取原文件内容
+            const content = await this.readFileAsBuffer(remotePath);
+
+            // 写入备份文件
+            await this.writeFile(backupPath, content);
+
+            return backupPath;
+        } catch (error: any) {
+            throw new Error(`备份文件失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 递归备份目录
+     * @param remotePath 原始目录路径
+     * @param backupBasePath 备份基础路径
+     * @returns 备份后的目录路径
+     */
+    async backupDirectory(remotePath: string, backupBasePath: string): Promise<string> {
+        if (!this.sftp) {
+            throw new Error('SFTP not connected');
+        }
+
+        // 生成备份路径
+        const now = new Date();
+        const datePath = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
+        const timePath = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+        
+        // 构建备份目录路径
+        const backupDir = path.posix.join(
+            backupBasePath,
+            this._backupPath,
+            datePath
+        );
+
+        // 获取原始目录名
+        const dirName = path.basename(remotePath);
+        // 构建备份目录路径
+        const backupPath = path.posix.join(backupDir, `${dirName}.${timePath}`);
+
+        try {
+            // 创建备份目录
+            await this.mkdir(backupPath, true);
+
+            // 递归复制目录内容
+            await this.copyDirectory(remotePath, backupPath);
+
+            return backupPath;
+        } catch (error: any) {
+            throw new Error(`备份目录失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 递归复制目录
+     */
+    private async copyDirectory(srcPath: string, destPath: string): Promise<void> {
+        // 读取源目录内容
+        const files = await this.listFiles(srcPath);
+        
+        for (const file of files) {
+            const srcFilePath = path.posix.join(srcPath, file.filename);
+            const destFilePath = path.posix.join(destPath, file.filename);
+
+            // 跳过 . 和 ..
+            if (file.filename === '.' || file.filename === '..') {
+                continue;
+            }
+
+            if (file.longname.startsWith('d')) {
+                // 是目录，递归复制
+                await this.mkdir(destFilePath, true);
+                await this.copyDirectory(srcFilePath, destFilePath);
+            } else {
+                // 是文件，直接复制
+                const content = await this.readFileAsBuffer(srcFilePath);
+                await this.writeFile(destFilePath, content);
+            }
+        }
     }
 } 

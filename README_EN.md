@@ -12,7 +12,7 @@ SFTP Tools is a VS Code extension for managing remote server files.
 - 🔒 Password and key authentication support
 - 📋 Multi-server management
 - 🖥️ One-click SSH connection
-
+- 😊 Support backup
 ![alt text](./media/images/setting1.png)
 ![alt text](./media/images/setting2.png)
 ![alt text](./media/images/use1.png)

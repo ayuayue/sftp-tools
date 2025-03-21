@@ -47,4 +47,9 @@ export class StatusBarManager {
     public hideProgress() {
         this.statusBarItem.hide();
     }
+
+    public clear(): void {
+        this.statusBarItem.text = '';
+        this.statusBarItem.hide();
+    }
 } 

@@ -35,5 +35,13 @@
     "commands.uploadDirectoryToServer": "上传目录到其他服务器...",
     "commands.uploadDirectoryToAllServers": "上传目录到所有服务器",
     "configuration.useGlobalConfig.description": "使用全局配置而不是工作区配置",
-    "configuration.useGlobalConfig.markdownDescription": "启用后，所有工作区将使用相同的全局 SFTP 服务器配置。否则，每个工作区都有自己的服务器配置。"
+    "configuration.useGlobalConfig.markdownDescription": "启用后，所有工作区将使用相同的全局 SFTP 服务器配置。否则，每个工作区都有自己的服务器配置。",
+    "messages.backupDirDelete": "这是备份目录，确定要删除吗？如需禁用备份功能，可在设置中将备份路径设为空。",
+    "messages.backupDirDeleteConfirm": "删除",
+    "messages.backupDirDeleteCancel": "取消",
+    "messages.backupDisabled": "备份功能未启用，跳过备份操作",
+    "messages.backupPathSet": "备份路径设置为: {0}",
+    "messages.directoryBackedUp": "目录已备份到: {0}",
+    "messages.fileBackedUp": "文件已备份到: {0}",
+    "messages.backupFailed": "备份失败: {0}"
 } 

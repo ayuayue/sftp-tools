@@ -17,6 +17,7 @@ SFTP Tools 是一个用于在 VS Code 中管理远程服务器文件的扩展。
 - 👾 一键连接 ssh 终端
 - 🤗 多语言支持
 - 😊 配置分离
+- 😊 支持备份
 
 ![alt text](./media/images/setting1.png)
 ![alt text](./media/images/setting2.png)

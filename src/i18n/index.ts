@@ -15,6 +15,8 @@ const zh = {
         serverSettings: '服务器设置',
         showDeleteConfirm: '删除前确认',
         showDeleteConfirmDesc: '删除远程文件或文件夹前是否显示确认对话框',
+        uploadOrDeleteBackup: '上传或删除时备份文件到目录',
+        uploadOrDeleteBackupDesc: '上传或删除时是否备份文件,空表示不备份，默认备份到填写远程目录的 backup-sftp 目录',
         serverName: '服务器名称',
         serverNameRequired: '服务器名称不能为空',
         serverNameExists: '服务器名称已存在',
@@ -95,7 +97,15 @@ const zh = {
         autoInputPasswordPrompt: '是否自动输入保存的密码？',
         sshConnectionFailed: 'SSH 连接失败: {0}',
         noServer: '没有连接到服务器',
-        settingsSaveFailed: '保存失败: 无法写入配置文件'
+        settingsSaveFailed: '保存失败: 无法写入配置文件',
+        backupDirDelete: '这是备份目录，确定要删除吗？如需禁用备份功能，可在设置中将备份路径设为空。',
+        backupDirDeleteConfirm: '删除',
+        backupDirDeleteCancel: '取消',
+        backupDisabled: '备份功能未启用，跳过备份操作',
+        backupPathSet: '备份路径设置为: {0}',
+        directoryBackedUp: '目录已备份到: {0}',
+        fileBackedUp: '文件已备份到: {0}',
+        backupFailed: '备份失败: {0}'
     }
 };
 
@@ -114,6 +124,8 @@ const en = {
         serverSettings: 'Server Settings',
         showDeleteConfirm: 'Confirm before delete',
         showDeleteConfirmDesc: 'Show confirmation dialog before deleting remote files or folders',
+        uploadOrDeleteBackup: 'Backup when upload or delete file to directory',
+        uploadOrDeleteBackupDesc: 'Backup files when uploading or deleting, empty means no backup, default backup to backup-sftp directory in the remote directory',
         serverName: 'Server Name',
         serverNameRequired: 'Server name is required',
         serverNameExists: 'Server name already exists',
@@ -194,7 +206,15 @@ const en = {
         autoInputPasswordPrompt: 'Do you want to auto-input the saved password?',
         sshConnectionFailed: 'SSH connection failed: {0}',
         noServer: 'No server connected',
-        settingsSaveFailed: 'Save failed: Cannot write to configuration file'
+        settingsSaveFailed: 'Save failed: Cannot write to configuration file',
+        backupDirDelete: 'Are you sure you want to delete the backup directory?',
+        backupDirDeleteConfirm: 'Yes',
+        backupDirDeleteCancel: 'No',
+        backupDisabled: 'Backup feature is disabled, skipping backup operation',
+        backupPathSet: 'Backup path is set to: {0}',
+        directoryBackedUp: 'Directory backed up to: {0}',
+        fileBackedUp: 'File backed up to: {0}',
+        backupFailed: 'Backup failed: {0}'
     }
 };
 
