@@ -1,13 +1,17 @@
 {
-  "servers": [
-    {
-      "name": "62.234.123.49",
-      "host": "62.234.123.49",
-      "port": 22,
-      "username": "root",
-      "password": "RJR+@m?j(Z",
-      "localPath": "/",
-      "remotePath": "/"
+    "servers": [
+        {
+            "name": "62.234.123.49",
+            "host": "62.234.123.49",
+            "port": 22,
+            "username": "root",
+            "password": "RJR+@m?j(Z",
+            "localPath": "/",
+            "remotePath": "/"
+        }
+    ],
+    "settings": {
+        "showConfirmDialog": false,
+        "uploadOrDeleteBackup": ""
     }
-  ]
 }

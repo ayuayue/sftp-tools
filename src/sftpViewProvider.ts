@@ -394,79 +394,43 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
         }
     }
 
-    async openFile(item: ExplorerItem, isDoubleClick = false) {
+    async openFile(item: ExplorerItem, nonPreview: boolean = false) {
         try {
-            this.logger.log(`[${this.currentServer?.name}] Opening file: ${item.path}`, 'info');
-            
             if (!this.currentServer) {
-                throw new Error('No server connected');
+                throw new Error(this.i18n.messages.noServer);
             }
 
-            // 检查文件扩展名
-            const ext = path.extname(item.path).toLowerCase();
-            const isBinaryFile = this.isBinaryFile(ext);
+            // 创建临时文件
+            const tempDir = path.join(os.tmpdir(), 'sftp-tools');
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
+            }
 
-            if (isBinaryFile) {
-                // 对于二进制文件，直接下载而不是打开
-                const answer = await vscode.window.showInformationMessage(
-                    `${item.label} 是二进制文件，无法预览。是否要下载？`,
-                    '下载',
-                    '取消'
-                );
-                
-                if (answer === '下载') {
-                    await this.downloadRemoteFile(item);
-                }
-                return;
-            }
+            // 使用原始文件名创建临时文件，保留扩展名
+            const fileName = path.basename(item.path);
+            const tempPath = path.join(tempDir, fileName);
+
+            // 读取远程文件内容
+            const content = await this.sftpManager.readFileAsBuffer(item.path);
             
-            // 文本文件的处理逻辑...
-            const tmpDir = path.join(os.tmpdir(), 'sftp-tools');
-            if (!fs.existsSync(tmpDir)) {
-                fs.mkdirSync(tmpDir, { recursive: true });
-            }
-            
-            // 保持远程目录结构
-            const remoteDir = path.dirname(item.path);
-            const tempWorkDir = path.join(tmpDir, this.currentServer.name, remoteDir);
-            if (!fs.existsSync(tempWorkDir)) {
-                fs.mkdirSync(tempWorkDir, { recursive: true });
-            }
-            
-            const tempPath = path.join(tempWorkDir, item.label);
-            
-            // 获取并写入文件内容
-            const content = await this.sftpManager.readFile(item.path);
+            // 写入临时文件
             fs.writeFileSync(tempPath, content);
-            
-            this.logger.log(`[${this.currentServer.name}] Created temp file: ${tempPath}`, 'info');
 
             // 打开文件
-            const doc = await vscode.workspace.openTextDocument(tempPath);
-            
-            // 存储文件信息
-            this.remoteFiles.set(doc.uri.toString(), {
+            const uri = vscode.Uri.file(tempPath);
+            const doc = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(doc, { preview: !nonPreview });
+
+            // 记录文件信息
+            this.remoteFiles.set(uri.toString(), {
                 remotePath: item.path,
                 serverConfig: this.currentServer,
-                tempPath: tempPath,
-                tempDir: tmpDir  // 记录临时根目录
+                tempPath: tempPath
             });
-            
-            // 设置语言
-            await vscode.languages.setTextDocumentLanguage(doc, this.getLanguageId(item.label));
-            
-            // 显示文档
-            await vscode.window.showTextDocument(doc, {
-                preview: !isDoubleClick,
-                preserveFocus: !isDoubleClick
-            });
-            
-            // 设置上下文
-            await vscode.commands.executeCommand('setContext', 'sftp-tools.isRemoteFile', true);
-            
+
         } catch (error: any) {
-            this.logger.log(`[${this.currentServer?.name}] Failed to open file: ${error.message}`, 'error');
-            vscode.window.showErrorMessage(`Failed to open file: ${error.message}`);
+            this.logger.log(`[${this.currentServer?.name}] ${this.i18n.messages.operationFailed.replace('{0}', error.message)}`, 'error');
+            vscode.window.showErrorMessage(this.i18n.messages.operationFailed.replace('{0}', error.message));
         }
     }
 

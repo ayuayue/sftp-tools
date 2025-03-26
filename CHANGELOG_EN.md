@@ -2,6 +2,9 @@
 
 English | [Chinese](CHANGELOG.md)
 
+## [1.1.3] - 2025-03-26
+- Fixed the problem that some file extensions cannot be opened when opening remote files
+
 ## [1.1.2] - 2025-03-21
 - Independent other configurations in the configuration file
 - Added a backup operation before replacing or deleting the uploaded file
