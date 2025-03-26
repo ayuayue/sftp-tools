@@ -4,6 +4,8 @@
 
 SFTP Tools 是一个用于在 VS Code 中管理远程服务器文件的扩展。
 
+安装地址：https://marketplace.visualstudio.com/items?itemName=caoayu.sftp-tools
+
 ## 功能特点
 
 - 💕 可视化配置,支持密钥连接
