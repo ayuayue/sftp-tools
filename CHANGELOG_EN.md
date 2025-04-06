@@ -2,6 +2,10 @@
 
 English | [Chinese](CHANGELOG.md)
 
+## [1.1.4] - 2025-04-07
+- Optimize ssh end point connection operation
+- Optimize the sorting of remote directories
+
 ## [1.1.3] - 2025-03-26
 - Fixed the problem that some file extensions cannot be opened when opening remote files
 

@@ -84,7 +84,17 @@ export class SftpManager {
                     return;
                 }
                 list.sort((a: ssh2.FileEntry, b: ssh2.FileEntry) => {
-                    return a.filename.localeCompare(b.filename);
+                    // 首先判断是否为目录
+                    const aIsDir = a.longname.startsWith('d');
+                    const bIsDir = b.longname.startsWith('d');
+                    
+                    // 如果两个都是目录或都是文件，按名称排序
+                    if (aIsDir === bIsDir) {
+                        return a.filename.localeCompare(b.filename);
+                    }
+                    
+                    // 如果 a 是目录而 b 不是，a 排在前面
+                    return aIsDir ? -1 : 1;
                 });
                 resolve(list);
             });

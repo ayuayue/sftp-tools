@@ -105,7 +105,8 @@ const zh = {
         backupPathSet: '备份路径设置为: {0}',
         directoryBackedUp: '目录已备份到: {0}',
         fileBackedUp: '文件已备份到: {0}',
-        backupFailed: '备份失败: {0}'
+        backupFailed: '备份失败: {0}',
+        pleaseInputPassword: '请在终端中输入密码'
     }
 };
 
@@ -198,7 +199,7 @@ const en = {
         configureNow: 'Configure now?',
         selectServer: 'Select server',
         uploadPartialSuccess: 'Upload completed with {0} successes and {1} failures. Check output for details.',
-        uploadToServer: 'Uploading to {0}',
+        uploadToServer: 'Upload to {0}',
         uploadingToServer: 'Uploading to {0}...',
         uploadingProgress: 'Uploading to {0} ({1}/{2})',
         serverConnected: 'Connected to {0}',
@@ -206,15 +207,16 @@ const en = {
         autoInputPasswordPrompt: 'Do you want to auto-input the saved password?',
         sshConnectionFailed: 'SSH connection failed: {0}',
         noServer: 'No server connected',
-        settingsSaveFailed: 'Save failed: Cannot write to configuration file',
-        backupDirDelete: 'Are you sure you want to delete the backup directory?',
-        backupDirDeleteConfirm: 'Yes',
-        backupDirDeleteCancel: 'No',
-        backupDisabled: 'Backup feature is disabled, skipping backup operation',
+        settingsSaveFailed: 'Save failed: Cannot write to config file',
+        backupDirDelete: 'This is a backup directory, are you sure you want to delete it? To disable backup, you can set the backup path to empty in settings.',
+        backupDirDeleteConfirm: 'Delete',
+        backupDirDeleteCancel: 'Cancel',
+        backupDisabled: 'Backup is disabled, skipping backup operation',
         backupPathSet: 'Backup path is set to: {0}',
         directoryBackedUp: 'Directory backed up to: {0}',
         fileBackedUp: 'File backed up to: {0}',
-        backupFailed: 'Backup failed: {0}'
+        backupFailed: 'Backup failed: {0}',
+        pleaseInputPassword: 'Please enter your password in the terminal'
     }
 };
 
