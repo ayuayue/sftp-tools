@@ -180,8 +180,19 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
     async connectSSH(serverItem: ServerItem) {
         const server = serverItem.config;
         const i18n = getLocaleText();
-        
+    
         try {
+            // 显示确认对话框
+            // const answer = await vscode.window.showInformationMessage(
+            //     `正在连接到服务器 ${server.name} (${server.host}:${server.port})，密码将在提示时自动输入`,
+            //     '确定',
+            //     '取消'
+            // );
+
+            // if (answer !== '确定') {
+            //     return;
+            // }
+
             // 创建新的终端
             const terminal = vscode.window.createTerminal({
                 name: `SSH: ${server.name}`,
@@ -196,10 +207,18 @@ export class SftpServersProvider implements vscode.TreeDataProvider<ServerItem> 
             // 显示终端并聚焦
             terminal.show();
 
-            // 如果使用密码认证且有密码，直接输入密码
-            if (!server.privateKeyPath && server.password) {
-                // 等待终端准备就绪
+            // 如果使用密码认证且有密码，等待密码提示后输入
+            if (server.password) {
+                // 等待一段时间让终端准备就绪
                 await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // 发送一个空行来触发密码提示
+                terminal.sendText('\n', true);
+                
+                // 等待密码提示出现
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // 输入密码
                 terminal.sendText(server.password, true);
             }
         } catch (error: any) {

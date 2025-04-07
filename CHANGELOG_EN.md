@@ -2,6 +2,9 @@
 
 English | [Chinese](CHANGELOG.md)
 
+## [1.1.5] - 2025-04-08
+- Optimize ssh terminal auto connect
+
 ## [1.1.4] - 2025-04-07
 - Optimize ssh end point connection operation
 - Optimize the sorting of remote directories
