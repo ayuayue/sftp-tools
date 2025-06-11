@@ -2,6 +2,22 @@
 
 English | [Chinese](CHANGELOG.md)
 
+## [1.1.7] - 2024-03-21
+- Added: Optimized settings editor interface for better user experience
+- Added: Enhanced configuration management for shortcut upload functionality
+- Added: Remote file refresh functionality to get the latest content from server
+- Added: Refresh button in editor title bar for quick remote file refresh
+- Improved: Better sorting logic for remote file lists with directories displayed first
+- Improved: Enhanced configuration file migration and management mechanism
+- Improved: Enhanced file download logic to ensure getting the latest server content
+- Improved: Added file refresh state check to prevent downloading old versions during refresh
+- Fixed: Resolved display issues with certain configuration items in settings editor
+- Fixed: Improved SFTP connection stability and error handling
+- Fixed: Resolved issue with file list not updating immediately after upload
+
+## [1.1.6] - 2025-05-06
+- Added: Shortcut upload functionality can now be configured via a switch in the global settings page.
+- Improved: Adjusted `Ctrl+S` (Cmd+S) shortcut upload behavior to respond to the new global setting.
 ## [1.1.5] - 2025-04-08
 - Optimize ssh terminal auto connect
 

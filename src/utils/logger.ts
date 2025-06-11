@@ -47,6 +47,12 @@ export class Logger {
     public show(preserveFocus: boolean = true): void {
         this.outputChannel.show(preserveFocus);
     }
+    /**
+     * 隐藏输出面板
+     */
+    public hide(): void {
+        this.outputChannel.hide();
+    }
 
     /**
      * 清除日志

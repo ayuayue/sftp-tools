@@ -12,6 +12,8 @@
     ],
     "settings": {
         "showConfirmDialog": false,
-        "uploadOrDeleteBackup": ""
+        "uploadOrDeleteBackup": "",
+        "enableAutoUpload": false,
+        "enableShortcutUpload": false
     }
 }

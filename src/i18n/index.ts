@@ -55,7 +55,12 @@ const zh = {
         configureNow: '配置服务器',
         useGlobalConfig: '使用全局配置',
         useGlobalConfigDesc: '启用后，所有工作区将使用相同的服务器配置；禁用后，每个工作区有独立配置',
-        enterPrivateKeyPath: '输入或选择私钥文件路径'
+        enterPrivateKeyPath: '输入或选择私钥文件路径',
+        enableShortcutUpload: '启用快捷键上传',
+        enableShortcutUploadDesc: '启用或禁用通过快捷键上传文件。',
+        enableAutoUpload: '启用保存时自动上传',
+        enableAutoUploadDesc: '启用或禁用保存文件时自动上传功能。',
+        autoUploadShortcutHint: '默认快捷键：Ctrl+S (Mac 上为 Cmd+S)。您可以在 VS Code 的键盘快捷方式首选项中自定义此快捷键 (搜索 \'sftp-tools.uploadFile\')。'
     },
     status: {
         uploading: '正在上传...',
@@ -106,7 +111,18 @@ const zh = {
         directoryBackedUp: '目录已备份到: {0}',
         fileBackedUp: '文件已备份到: {0}',
         backupFailed: '备份失败: {0}',
-        pleaseInputPassword: '请在终端中输入密码'
+        pleaseInputPassword: '请在终端中输入密码',
+        shortcutUploadDisabled: '快捷键上传功能已在设置中禁用。'
+    },
+    sftpManagerLogs: { // 新增 SFTP Manager 日志
+        attemptingConnect: '尝试连接到 {0}',
+        sshClientReady: 'SSH 客户端已准备就绪。',
+        sftpSessionError: 'SFTP 会话错误: {0}',
+        sftpSessionEstablished: 'SFTP 会话已建立。',
+        sshClientError: 'SSH 客户端错误: {0}',
+        sshClientEnded: 'SSH 客户端连接被远程主机关闭。',
+        sshClientClosed: 'SSH 客户端连接已关闭。发生错误: {0}',
+        sshClientTimeout: 'SSH 客户端连接超时。'
     }
 };
 
@@ -165,7 +181,12 @@ const en = {
         configureNow: 'Configure Server',
         useGlobalConfig: 'Use global configuration',
         useGlobalConfigDesc: 'When enabled, all workspaces will use the same server configurations; when disabled, each workspace has its own configuration',
-        enterPrivateKeyPath: 'Enter or select private key file path'
+        enterPrivateKeyPath: 'Enter or select private key file path',
+        enableShortcutUpload: 'Enable Shortcut Upload',
+        enableShortcutUploadDesc: 'Enable or disable file upload via shortcut.',
+        enableAutoUpload: 'Enable Auto Upload on Save',
+        enableAutoUploadDesc: 'Enable or disable automatic file upload when saving.',
+        autoUploadShortcutHint: 'Default shortcut: Ctrl+S (Cmd+S on Mac). You can customize this in VS Code\'s Keyboard Shortcuts preferences (search for \'sftp-tools.uploadFile\').'
     },
     status: {
         uploading: 'Uploading...',
@@ -216,7 +237,18 @@ const en = {
         directoryBackedUp: 'Directory backed up to: {0}',
         fileBackedUp: 'File backed up to: {0}',
         backupFailed: 'Backup failed: {0}',
-        pleaseInputPassword: 'Please enter your password in the terminal'
+        pleaseInputPassword: 'Please enter your password in the terminal',
+        shortcutUploadDisabled: 'Shortcut upload is disabled in settings.'
+    },
+    sftpManagerLogs: { // Add SFTP Manager logs
+        attemptingConnect: 'Attempting to connect to {0}',
+        sshClientReady: 'SSH client ready.',
+        sftpSessionError: 'SFTP session error: {0}',
+        sftpSessionEstablished: 'SFTP session established.',
+        sshClientError: 'SSH client error: {0}',
+        sshClientEnded: 'SSH client connection ended by remote.',
+        sshClientClosed: 'SSH client connection closed. Had error: {0}',
+        sshClientTimeout: 'SSH client connection timeout.'
     }
 };
 

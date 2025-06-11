@@ -1,9 +1,9 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import { SftpServersProvider, SftpExplorerProvider } from './sftpViewProvider';
+import * as path from 'path'; // Added for path operations
+import { SftpServersProvider, SftpExplorerProvider, ServerItem, ExplorerItem } from './sftpViewProvider'; // Added ExplorerItem
 import { SettingsEditor } from './settingsEditor';
-import { ServerItem } from './sftpViewProvider';
 import { getLocaleText } from './i18n';
 import { Logger } from './utils/logger';
 
@@ -23,6 +23,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 创建设置编辑器提供程序
 	const settingsEditorProvider = new SettingsEditor(context.extensionUri);
+
+	// 初始化快捷键上传上下文状态
+	const initialShortcutSettings = settingsEditorProvider.getSettings();
+	vscode.commands.executeCommand('setContext', 'sftp-tools.enableShortcutUploadContext', initialShortcutSettings.enableAutoUpload);
 
 	// 先注册设置编辑器命令
 	context.subscriptions.push(
@@ -306,6 +310,43 @@ export function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('sftp-tools.updateOtherSetting', async (setting: string, value: any) => {
 			settingsEditorProvider.updateSettings({ [setting]: value });
+		}),
+
+		// Command to handle deleting a remote directory from the native explorer context menu
+		vscode.commands.registerCommand('sftp-tools.deleteRemoteDirectory', async (uri?: vscode.Uri) => {
+			if (uri) {
+				const i18n = getLocaleText(); // For potential error messages
+				if (!sftpExplorerProvider.getCurrentServer()) {
+					vscode.window.showErrorMessage(i18n.messages.noServer || 'No SFTP server connected. Please connect to a server first.');
+					return;
+				}
+				const itemName = path.basename(uri.path); // uri.path for sftp scheme is like /remote/path/dir
+				const itemPath = uri.path;
+				
+				// Create a new ExplorerItem to pass to deleteRemoteFile
+				const explorerItem = new ExplorerItem(
+					itemName,                             // label: string
+					vscode.TreeItemCollapsibleState.None, // collapsibleState: vscode.TreeItemCollapsibleState
+					itemPath,                             // path: string
+					true                                  // isDirectory: boolean (true because this command is for directories)
+				);
+				await sftpExplorerProvider.deleteRemoteFile(explorerItem);
+			} else {
+				// This case should ideally not happen if triggered from a context menu with a selected item.
+				const i18n = getLocaleText();
+				vscode.window.showErrorMessage(i18n.messages.pathNotFound || 'No directory specified for deletion.');
+				const logger = Logger.getInstance();
+				logger.log('sftp-tools.deleteRemoteDirectory called without a URI.', 'warning'); // Changed 'warn' to 'warning'
+			}
+		}),
+		vscode.commands.registerCommand('sftp-tools.refreshRemoteFile', async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				return;
+			}
+
+			const uri = editor.document.uri.toString();
+			await sftpExplorerProvider.refreshRemoteFile(uri);
 		})
 	);
 

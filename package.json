@@ -3,7 +3,7 @@
   "displayName": "SFTP Tools",
   "description": "A powerful SFTP/FTP client for VS Code with an intuitive interface",
   "publisher": "caoayu",
-  "version": "1.1.5",
+  "version": "1.1.7",
   "author": {
     "name": "caoayu",
     "email": "caoayu80@gmail.com"
@@ -45,6 +45,14 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "keybindings": [
+      {
+        "command": "sftp-tools.uploadFile",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "editorTextFocus && sftp-tools.enableShortcutUploadContext"
+      }
+    ],
     "commands": [
       {
         "command": "sftp-tools.showInfo",
@@ -87,6 +95,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "sftp-tools.refreshRemoteFile",
+        "title": "Refresh Remote File",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "sftp-tools.uploadFile",
         "title": "%commands.uploadFile%",
         "icon": "$(cloud-upload)"
@@ -104,6 +117,11 @@
         "command": "sftp-tools.disconnectServer",
         "title": "%commands.disconnectServer%",
         "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "sftp-tools.connectServer",
+        "title": "%commands.connectServer%",
+        "icon": "$(plug)"
       },
       {
         "command": "sftp-tools.uploadToAllServers",
@@ -218,6 +236,11 @@
           "type": "boolean",
           "default": true,
           "description": "是否显示删除确认对话框"
+        },
+        "sftp-tools.enableAutoUpload": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否启用保存时自动上传功能"
         }
       }
     },
@@ -285,6 +308,11 @@
         {
           "command": "sftp-tools.uploadFile",
           "when": "resourceScheme == file",
+          "group": "navigation"
+        },
+        {
+          "command": "sftp-tools.refreshRemoteFile",
+          "when": "sftp-tools.isRemoteFile",
           "group": "navigation"
         }
       ],

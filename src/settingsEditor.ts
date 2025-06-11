@@ -34,7 +34,8 @@ export class SettingsEditor {
     servers: [],
     settings: {
       showConfirmDialog: true,
-      uploadOrDeleteBackup: ''
+      uploadOrDeleteBackup: '',
+      enableAutoUpload: false // 修正属性名并添加默认值
     }
   };
 
@@ -53,13 +54,16 @@ export class SettingsEditor {
       const vscodeConfig = vscode.workspace.getConfiguration('sftp-tools');
       const showConfirmDialog = vscodeConfig.get('showConfirmDialog', true);
       const uploadOrDeleteBackup = vscodeConfig.get('uploadOrDeleteBackup', '');
+      // 读取新的配置项，如果不存在则使用默认值 false
+      const enableAutoUpload = vscodeConfig.get('enableAutoUpload', false);
 
       // 2. 初始化默认配置
       this.config = {
         servers: [],
         settings: {
           showConfirmDialog,
-          uploadOrDeleteBackup
+          uploadOrDeleteBackup,
+          enableAutoUpload // 添加新的配置项
         }
       };
 
@@ -85,6 +89,7 @@ export class SettingsEditor {
       vscodeConfig.update('showConfirmDialog', undefined, true);
       vscodeConfig.update('uploadOrDeleteBackup', undefined, true);
       vscodeConfig.update('useGlobalConfig', undefined, true);
+      vscodeConfig.update('enableAutoUpload', undefined, true); // 清理旧的或迁移的 VSCode 配置
 
     } catch (error) {
       console.error('Failed to initialize config:', error);
@@ -347,9 +352,10 @@ export class SettingsEditor {
     const serversJson = JSON.stringify(this.loadServersFromFile());
 
     // 读取全局配置
-    const config = vscode.workspace.getConfiguration("sftp-tools");
-    const showDeleteConfirm = config.get("showConfirmDialog", true);
-    const uploadOrDeleteBackup = config.get("uploadOrDeleteBackup", "");
+    // const config = vscode.workspace.getConfiguration("sftp-tools"); // 不再需要从 vscode config 读取这些
+    // const showDeleteConfirm = config.get("showConfirmDialog", true);
+    // const uploadOrDeleteBackup = config.get("uploadOrDeleteBackup", "");
+    const settings = this.getSettings(); // 从我们自己的配置系统中获取
 
     // 修改 CSP 策略
     const csp = `
@@ -391,8 +397,51 @@ export class SettingsEditor {
                     display: flex;
                     flex-direction: column;
                     height: 100vh;
-                    padding: 0;
+                    padding: 20px;
                     box-sizing: border-box;
+                }
+
+                .settings-section {
+                    margin-bottom: 20px;
+                }
+
+                .form-group {
+                    margin-bottom: 15px;
+                }
+
+                .form-group label {
+                    display: block;
+                    margin-bottom: 5px;
+                }
+
+                .form-group input[type="text"] {
+                    width: 100%;
+                    padding: 8px;
+                    border: 1px solid var(--vscode-input-border);
+                    background-color: var(--vscode-input-background);
+                    color: var(--vscode-input-foreground);
+                }
+
+                .form-group input[type="checkbox"] {
+                    margin-right: 8px;
+                }
+
+                .description {
+                    color: var(--vscode-descriptionForeground);
+                    font-size: 0.9em;
+                    margin-top: 5px;
+                }
+
+                button {
+                    padding: 8px 16px;
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    cursor: pointer;
+                }
+
+                button:hover {
+                    background-color: var(--vscode-button-hoverBackground);
                 }
                 
                 /* 头部样式 */
@@ -821,7 +870,7 @@ export class SettingsEditor {
                             </div>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="showDeleteConfirmToggle" ${
-                                  showDeleteConfirm ? "checked" : ""
+                                  settings.showConfirmDialog ? "checked" : ""
                                 }>
                                 <span class="slider"></span>
                             </label>
@@ -835,9 +884,25 @@ export class SettingsEditor {
                             </div>
                             <label class="">
                                 <input type="text" id="uploadOrDeleteBackupToggle" value="${
-                                  uploadOrDeleteBackup
+                                  settings.uploadOrDeleteBackup
                                 }">
-                                
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-item-label">
+                                <div>${i18n.settings.enableAutoUpload || 'Enable Auto Upload'}</div>
+                                <div class="setting-item-description">${
+                                  i18n.settings.enableAutoUploadDesc || 'Enable or disable file auto upload on save.'
+                                }</div>
+                                <div class="setting-item-description" style="margin-top: 5px;">${
+                                  i18n.settings.autoUploadShortcutHint || ''
+                                }</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="enableAutoUploadToggle" ${
+                                  settings.enableAutoUpload ? "checked" : ""
+                                }>
+                                <span class="slider"></span>
                             </label>
                         </div>
                     </div>
@@ -850,9 +915,12 @@ export class SettingsEditor {
                 const vscode = acquireVsCodeApi();
                 let servers = ${serversJson};
                 let activeServerIndex = 0;
-                let showDeleteConfirm = ${showDeleteConfirm};
+                // 从 settings 对象获取初始值
+                let showDeleteConfirm = ${settings.showConfirmDialog};
+                let uploadOrDeleteBackup = '${settings.uploadOrDeleteBackup}';
+                let enableAutoUpload = ${settings.enableAutoUpload};
                 let activeTab = 'servers';
-                
+
                 // 添加消息处理
                 window.addEventListener('message', event => {
                     const message = event.data;
@@ -902,6 +970,16 @@ export class SettingsEditor {
                         command: 'updateOtherSetting',
                         setting: 'uploadOrDeleteBackup',
                         value: uploadOrDeleteBackup
+                    });
+                });
+
+                // 快捷键上传开关
+                document.getElementById('enableAutoUploadToggle').addEventListener('change', (e) => {
+                    enableAutoUpload = e.target.checked;
+                    vscode.postMessage({
+                        command: 'updateOtherSetting',
+                        setting: 'enableAutoUpload',
+                        value: enableAutoUpload
                     });
                 });
                 
@@ -1375,7 +1453,8 @@ export class SettingsEditor {
           servers: loadedConfig.servers || [],
           settings: {
             showConfirmDialog: loadedConfig.settings?.showConfirmDialog ?? true,
-            uploadOrDeleteBackup: loadedConfig.settings?.uploadOrDeleteBackup ?? ''
+            uploadOrDeleteBackup: loadedConfig.settings?.uploadOrDeleteBackup ?? '',
+            enableAutoUpload: loadedConfig.settings?.enableAutoUpload ?? false // 确保加载时包含默认值
           }
         };
       }
@@ -1388,6 +1467,11 @@ export class SettingsEditor {
   updateSettings(settings: Partial<typeof this.config.settings>) {
     this.config.settings = { ...this.config.settings, ...settings };
     this.saveConfig();
+
+    // 如果 enableShortcutUpload 设置发生变化，则更新上下文状态
+    if (settings.hasOwnProperty('enableAutoUpload')) {
+      vscode.commands.executeCommand('setContext', 'sftp-tools.enableShortcutUploadContext', settings.enableAutoUpload);
+    }
   }
 }
 

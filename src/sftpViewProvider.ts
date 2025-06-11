@@ -269,6 +269,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
         serverConfig: ServerConfig;
         tempPath?: string;
         tempDir?: string;  // 添加临时目录记录
+        isRefreshing?: boolean;  // 添加刷新状态
     }>();
     private logger: Logger = Logger.getInstance();
     private statusBarItem: vscode.StatusBarItem;
@@ -282,8 +283,11 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
         this.serversProvider = serversProvider;
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
         
-        // 初始化时显示日志面板
+        // 初始化时显示日志面板,3秒后自动关闭
         this.logger.show(true);
+        setTimeout(() => {
+            this.logger.hide();
+        }, 3000);
 
         // 监听配置变化
         vscode.workspace.onDidChangeConfiguration(e => {
@@ -341,7 +345,11 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             
             // 连接时显示日志
             this.logger.log(this.i18n.status.connected, 'info', server.name);
+            // 连接成功时显示日志,3秒后自动关闭
             this.logger.show(true);
+            setTimeout(() => {
+                this.logger.hide();
+            }, 3000);
         } catch (error: any) {
             // 错误时自动显示日志
             this.logger.log(error.message, 'error', server.name);
@@ -562,11 +570,11 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             // 更新上传按钮的标题
             const serverDisplay = this.getServerDisplayName(fileInfo.serverConfig);
             vscode.commands.executeCommand('setContext', 'sftp-tools.isRemoteFile', true);
-            // 更新命令标题
-            vscode.commands.executeCommand('setCommand', 'sftp-tools.uploadFile', {
-                title: `Upload to [${this.currentServer?.name}]`,
-                tooltip: `Upload to [${this.currentServer?.name}]`
-            });
+            // 更新命令标题 - vscode.commands.executeCommand('setCommand', ...) is not a valid API
+            // vscode.commands.executeCommand('setCommand', 'sftp-tools.uploadFile', {
+            //     title: `Upload to [${this.currentServer?.name}]`,
+            //     tooltip: `Upload to [${this.currentServer?.name}]`
+            // });
             return true;
         }
         return false;
@@ -574,6 +582,13 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
 
     getFileInfo(uri: string) {
         return this.remoteFiles.get(uri);
+    }
+
+    async getRemoteFileContent(remotePath: string): Promise<Buffer> {
+        if (!this.sftpManager) {
+            throw new Error('SFTP not connected');
+        }
+        return this.sftpManager.readFileAsBuffer(remotePath);
     }
 
     // 获取所有服务器配置
@@ -629,6 +644,20 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
                 throw new Error('No server connected');
             }
 
+            // 检查文件是否正在刷新
+            const editor = vscode.window.visibleTextEditors.find(e => {
+                const fileInfo = this.remoteFiles.get(e.document.uri.toString());
+                return fileInfo && fileInfo.remotePath === item.path;
+            });
+
+            if (editor) {
+                const fileInfo = this.remoteFiles.get(editor.document.uri.toString());
+                if (fileInfo?.isRefreshing) {
+                    vscode.window.showWarningMessage('文件正在刷新中，请稍后再试');
+                    return;
+                }
+            }
+
             // 获取工作区根目录
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             if (!workspaceFolder) {
@@ -649,7 +678,7 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
             this.logger.log(`[${this.currentServer.name}] 开始下载文件: ${item.path}`, 'info');
             this.statusBar.showProgress(this.i18n.status.downloading);
 
-            // 获取文件内容（作为 Buffer）
+            // 从远程服务器获取最新文件内容
             const content = await this.sftpManager.readFileAsBuffer(item.path);
 
             // 确保目标目录存在
@@ -911,15 +940,57 @@ export class SftpExplorerProvider implements vscode.TreeDataProvider<ExplorerIte
     }
 
     private async getRemoteFiles(path: string): Promise<ExplorerItem[]> {
-        const files = await this.sftpManager.listFiles(path);
-        return files.map(file => new ExplorerItem(
-            file.filename,
-            file.longname.startsWith('d') ? 
-                vscode.TreeItemCollapsibleState.Collapsed : 
-                vscode.TreeItemCollapsibleState.None,
-            `${path}/${file.filename}`.replace(/\/+/g, '/'),
-            file.longname.startsWith('d')
-        ));
+        try {
+            // 确保每次都从服务器获取最新的文件列表
+            const files = await this.sftpManager.listFiles(path);
+            return files.map(file => new ExplorerItem(
+                file.filename,
+                file.longname.startsWith('d') ? 
+                    vscode.TreeItemCollapsibleState.Collapsed : 
+                    vscode.TreeItemCollapsibleState.None,
+                `${path}/${file.filename}`.replace(/\/+/g, '/'),
+                file.longname.startsWith('d')
+            ));
+        } catch (error: any) {
+            this.logger.log(`获取远程文件列表失败: ${error.message}`, 'error');
+            throw error;
+        }
+    }
+
+    async refreshRemoteFile(uri: string): Promise<void> {
+        const fileInfo = this.remoteFiles.get(uri);
+        if (!fileInfo) {
+            return;
+        }
+
+        try {
+            // 设置刷新状态
+            fileInfo.isRefreshing = true;
+            this.remoteFiles.set(uri, fileInfo);
+
+            // 从远程服务器重新读取文件内容
+            const content = await this.sftpManager.readFileAsBuffer(fileInfo.remotePath);
+            
+            // 更新编辑器内容
+            const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri);
+            if (editor) {
+                const edit = new vscode.WorkspaceEdit();
+                const fullRange = new vscode.Range(
+                    editor.document.positionAt(0),
+                    editor.document.positionAt(editor.document.getText().length)
+                );
+                edit.replace(editor.document.uri, fullRange, content.toString());
+                await vscode.workspace.applyEdit(edit);
+            }
+
+            vscode.window.showInformationMessage('文件已从远程服务器刷新');
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`刷新失败: ${error.message}`);
+        } finally {
+            // 清除刷新状态
+            fileInfo.isRefreshing = false;
+            this.remoteFiles.set(uri, fileInfo);
+        }
     }
 }
 

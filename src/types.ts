@@ -15,5 +15,6 @@ export interface WorkspaceConfig {
     settings: {
         showConfirmDialog: boolean;
         uploadOrDeleteBackup: string;
+        enableAutoUpload: boolean;
     }
-} 
+}

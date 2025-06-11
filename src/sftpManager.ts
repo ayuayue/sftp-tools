@@ -1,15 +1,24 @@
 import * as ssh2 from 'ssh2';
 import * as path from 'path';
+import { Logger } from './utils/logger'; // Import Logger
+import { getLocaleText } from './i18n'; // Import getLocaleText
 
 export class SftpManager {
     private client: ssh2.Client | null = null;
     private sftp: ssh2.SFTPWrapper | null = null;
     private isCancelled: boolean = false;
     private _backupPath: string = 'backup-sftp';
+    private logger: Logger; // Add logger instance
+    private i18n: any; // For localized strings
 
     // 添加公共 getter
     public get backupPath(): string {
         return this._backupPath;
+    }
+
+    constructor() { // Initialize logger and i18n in constructor
+        this.logger = Logger.getInstance();
+        this.i18n = getLocaleText();
     }
 
     cancelOperations() {
@@ -26,19 +35,48 @@ export class SftpManager {
     }
 
     async connect(serverConfig: any): Promise<void> {
+        const logPrefix = `SFTPManager:${serverConfig.host}`;
+        this.logger.log(this.i18n.sftpManagerLogs.attemptingConnect.replace('{0}', serverConfig.host), 'info', 'SFTPManager');
         return new Promise((resolve, reject) => {
+            // Removed: if (this.client && this.client.readable)
             this.client = new ssh2.Client();
+            let settled = false; // Flag to prevent multiple rejects/resolves
 
             this.client.on('ready', () => {
-                this.client!.sftp((err: any, sftp: any) => {
+                if (settled) return;
+                settled = true;
+                this.logger.log(this.i18n.sftpManagerLogs.sshClientReady, 'info', logPrefix);
+                this.client!.sftp((err: Error | undefined, sftp: ssh2.SFTPWrapper) => { // Added type for err and sftp
                     if (err) {
+                        this.logger.log(this.i18n.sftpManagerLogs.sftpSessionError.replace('{0}', err.message), 'error', logPrefix);
                         reject(err);
+                    } else {
+                        this.logger.log(this.i18n.sftpManagerLogs.sftpSessionEstablished, 'info', logPrefix);
+                        this.sftp = sftp;
+                        resolve();
                     }
-                    this.sftp = sftp;
-                    resolve();
                 });
-            }).on('error', (err: any) => {
+            }).on('error', (err: Error) => { // Added type for err
+                if (settled) return;
+                settled = true;
+                this.logger.log(this.i18n.sftpManagerLogs.sshClientError.replace('{0}', err.message), 'error', logPrefix);
                 reject(err);
+            }).on('end', () => {
+                if (settled) return;
+                settled = true;
+                this.logger.log(this.i18n.sftpManagerLogs.sshClientEnded, 'warning', logPrefix);
+                reject(new Error(this.i18n.sftpManagerLogs.sshClientEnded.replace('{0}', ''))); // Keep error message generic for now or create specific i18n
+            }).on('close', (had_error?: boolean) => { // Changed hadError to had_error and made it optional
+                if (settled) return;
+                settled = true;
+                const closeMsg = this.i18n.sftpManagerLogs.sshClientClosed.replace('{0}', String(had_error));
+                this.logger.log(closeMsg, had_error ? 'error' : 'info', logPrefix);
+                reject(new Error(closeMsg.replace('{0}', String(had_error)))); // Keep error message generic or create specific i18n
+            }).on('timeout', () => {
+                if (settled) return;
+                settled = true;
+                this.logger.log(this.i18n.sftpManagerLogs.sshClientTimeout, 'error', logPrefix);
+                reject(new Error(this.i18n.sftpManagerLogs.sshClientTimeout.replace('{0}', ''))); // Keep error message generic or create specific i18n
             });
 
             const connectConfig: any = {
